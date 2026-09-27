@@ -1,0 +1,59 @@
+#!/bin/sh
+# ═══════════════════════════════════════════════════════════════════════════
+#  Pre-commit hook — blocks accidental secret commits
+#  Install: cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# ═══════════════════════════════════════════════════════════════════════════
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "🔍 Running security pre-commit checks..."
+
+ERRORS=0
+
+# ── 1. Block .env file commits ────────────────────────────────────────────
+if git diff --cached --name-only | grep -E "(^|/)\.env($|\..*)" | grep -v "\.env\.example"; then
+  echo "${RED}❌ BLOCKED: .env file staged for commit!${NC}"
+  echo "   Remove it: git reset HEAD .env"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ── 2. Block Supabase keys pattern ───────────────────────────────────────
+SUPABASE_KEY_PATTERN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\."
+if git diff --cached -- ':!.githooks' | grep -qE "$SUPABASE_KEY_PATTERN"; then
+  echo "${RED}❌ BLOCKED: Supabase JWT key detected in staged files!${NC}"
+  echo "   Use environment variables instead."
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ── 3. Block generic password patterns ───────────────────────────────────
+PASS_PATTERN="(password|secret|apikey|api_key)\s*=\s*['\"][^'\"]{8,}"
+if git diff --cached -- ':!.githooks' | grep -iE "$PASS_PATTERN" | grep -v "REPLACE_WITH\|your-.*-here\|changeme\|example\|placeholder"; then
+  echo "${YELLOW}⚠️  WARNING: Possible hardcoded credential detected!${NC}"
+  echo "   Check staged files for exposed secrets."
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ── 4. Block SSL private keys ─────────────────────────────────────────────
+if git diff --cached -- ':!.githooks' | grep -q "BEGIN.*PRIVATE KEY"; then
+  echo "${RED}❌ BLOCKED: Private key detected in staged files!${NC}"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ── 5. Check postgres.xdsmwvwxqtfnwokdxptk doesn't carry password ────────
+if git diff --cached -- ':!.githooks' | grep -E "xdsmwvwxqtfnwokdxptk:.+@"; then
+  echo "${RED}❌ BLOCKED: Supabase connection string with password detected!${NC}"
+  echo "   Use environment variables: \${SUPABASE_DB_PASSWORD}"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if [ $ERRORS -gt 0 ]; then
+  echo ""
+  echo "${RED}🚫 Commit blocked — $ERRORS security issue(s) found.${NC}"
+  echo "   Fix the issues above before committing."
+  exit 1
+fi
+
+echo "✅ Security checks passed."
+exit 0

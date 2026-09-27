@@ -1,0 +1,2 @@
+﻿# Enums
+UserRole enum: DISPATCHER, LOADER, DRIVER, STORE_MANAGER, ADMIN.

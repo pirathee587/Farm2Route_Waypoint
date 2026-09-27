@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: planning-service
+
+  # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: PlanningHikariPool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-test-query: SELECT 1
+
+  # ── JPA ──────────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: none          # Supabase manages schema via migrations
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+        format_sql: true
+    open-in-view: false
+
+  # ── RabbitMQ ─────────────────────────────────────────────────────────────
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:waypoint}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: waypoint
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          multiplier: 2.0
+
+# ── Server ───────────────────────────────────────────────────────────────
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+# ── Actuator ────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ── gRPC (Order Service connection) ──────────────────────────────────────
+grpc:
+  order-service:
+    host: ${ORDER_SERVICE_GRPC_HOST:order-service}
+    port: ${ORDER_SERVICE_GRPC_PORT:9090}
+
+# ── RabbitMQ Exchange / Queue names ──────────────────────────────────────
+waypoint:
+  rabbitmq:
+    exchange: waypoint.events
+    queues:
+      order-placed: order.placed
+      order-deferred: order.deferred
+      allocation-completed: allocation.completed
+    routing-keys:
+      order-placed: order.placed
+      order-deferred: order.deferred
+      allocation-completed: allocation.completed
+
+# ── Logging ──────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.waypoint: INFO
+    org.springframework.amqp: WARN
+    org.hibernate.SQL: WARN
+
+---
+# Docker profile overrides
+spring:
+  config:
+    activate:
+      on-profile: docker
+  jpa:
+    show-sql: false
+logging:
+  level:
+    com.waypoint: INFO

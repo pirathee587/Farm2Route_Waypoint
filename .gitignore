@@ -1,0 +1,60 @@
+# ── Environment (NEVER commit .env files) ────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── SSL Certs ─────────────────────────────────────────────────────────────────
+nginx/certs/*.key
+nginx/certs/*.crt
+nginx/certs/*.pem
+
+# ── .NET ──────────────────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# ── Java / Maven ──────────────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+!**/src/main/**/*.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# ── Go ────────────────────────────────────────────────────────────────────────
+vendor/
+*.exe
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/
+ml-datathon/data/raw/*.csv
+ml-datathon/outputs/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.dockerignore
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/settings.json
+*.swp
+*.swo

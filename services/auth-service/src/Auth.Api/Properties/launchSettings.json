@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:8080",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "SUPABASE_DB_HOST": "aws-0-ap-southeast-1.pooler.supabase.com",
+        "SUPABASE_DB_PORT": "5432",
+        "SUPABASE_DB_NAME": "postgres",
+        "SUPABASE_DB_USER": "postgres.xdsmwvwxqtfnwokdxptk",
+        "SUPABASE_DB_PASSWORD": "WayPoint12345@",
+        "JWT_SECRET": "WayPoint_SuperSecret_JwtKey_2026_MustBeLongEnough!",
+        "JWT_ISSUER": "waypoint-auth",
+        "JWT_AUDIENCE": "waypoint-clients",
+        "SUPABASE_URL": "https://xdsmwvwxqtfnwokdxptk.supabase.co"
+      }
+    }
+  }
+}

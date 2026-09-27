@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package waypoint.order.v1;
+
+option csharp_namespace = "Waypoint.Order.Grpc";
+option go_package = "github.com/waypoint/proto/order/v1;orderv1";
+option java_multiple_files = true;
+option java_package = "com.waypoint.order.grpc";
+
+// ─────────────────────────────────────────────
+// OrderService — Order lifecycle & reference data
+// ─────────────────────────────────────────────
+service OrderService {
+  // Place a new delivery order (enforces 4 PM cutoff)
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
+
+  // Retrieve a single order by ID
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+
+  // List orders with optional filters (date, outlet, status)
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+
+  // Mark a set of orders as closed after delivery confirmation
+  rpc CloseOrders(CloseOrdersRequest) returns (CloseOrdersResponse);
+
+  // Get outlet reference data by ID
+  rpc GetOutlet(GetOutletRequest) returns (GetOutletResponse);
+
+  // Get vehicle reference data by ID
+  rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse);
+}
+
+// ── Place Order ────────────────────────────────
+message PlaceOrderRequest {
+  // Outlet placing the order
+  string outlet_id = 1;
+  // SKU / product code
+  string product_code = 2;
+  // Requested quantity
+  int32 quantity = 3;
+  // Gross weight in kg
+  double weight_kg = 4;
+  // Volume in m³
+  double volume_m3 = 5;
+  // Brand identifier (used for brand-match constraint)
+  string brand = 6;
+  // Temperature requirement: AMBIENT | CHILLED | FROZEN
+  string temp_requirement = 7;
+  // Preferred delivery date (ISO-8601 date string)
+  string preferred_date = 8;
+  // Delivery window open time (HH:MM)
+  string window_open = 9;
+  // Delivery window close time (HH:MM)
+  string window_close = 10;
+}
+
+message PlaceOrderResponse {
+  // Generated order UUID
+  string order_id = 1;
+  // PENDING | ALLOCATED | DEFERRED | ATTEMPTED | DELIVERED
+  string status = 2;
+  // ISO-8601 timestamp of creation
+  string created_at = 3;
+}
+
+// ── Get Order ──────────────────────────────────
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+// ── List Orders ────────────────────────────────
+message ListOrdersRequest {
+  // Filter by date (ISO-8601 date string); empty = today
+  string date = 1;
+  // Filter by outlet ID; empty = all outlets
+  string outlet_id = 2;
+  // Filter by status; empty = all
+  string status = 3;
+  // Pagination
+  int32 page = 4;
+  int32 page_size = 5;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// ── Close Orders ───────────────────────────────
+message CloseOrdersRequest {
+  // List of order IDs to close
+  repeated string order_ids = 1;
+  // Who is closing (driver or system)
+  string closed_by = 2;
+}
+
+message CloseOrdersResponse {
+  // Number of orders successfully closed
+  int32 closed_count = 1;
+  // Order IDs that could not be closed (e.g., wrong state)
+  repeated string failed_ids = 2;
+}
+
+// ── Get Outlet ─────────────────────────────────
+message GetOutletRequest {
+  string outlet_id = 1;
+}
+
+message GetOutletResponse {
+  Outlet outlet = 1;
+}
+
+// ── Get Vehicle ────────────────────────────────
+message GetVehicleRequest {
+  string vehicle_id = 1;
+}
+
+message GetVehicleResponse {
+  Vehicle vehicle = 1;
+}
+
+// ── Shared Entity Messages ─────────────────────
+message Order {
+  string order_id = 1;
+  string outlet_id = 2;
+  string product_code = 3;
+  int32 quantity = 4;
+  double weight_kg = 5;
+  double volume_m3 = 6;
+  string brand = 7;
+  string temp_requirement = 8;
+  string preferred_date = 9;
+  string window_open = 10;
+  string window_close = 11;
+  // PENDING | ALLOCATED | DEFERRED | ATTEMPTED | DELIVERED
+  string status = 12;
+  string created_at = 13;
+  string updated_at = 14;
+}
+
+message Outlet {
+  string outlet_id = 1;
+  string name = 2;
+  string district = 3;
+  string depot = 4;
+  // STANDARD | RESTRICTED (parking constraint)
+  string parking_type = 5;
+  double lat = 6;
+  double lng = 7;
+}
+
+message Vehicle {
+  string vehicle_id = 1;
+  string registration = 2;
+  // TRUCK | VAN | MOTORCYCLE
+  string type = 3;
+  double weight_cap_kg = 4;
+  double volume_cap_m3 = 5;
+  // AMBIENT | CHILLED | FROZEN
+  string temp_capability = 6;
+  string depot = 7;
+  string brand = 8;
+}

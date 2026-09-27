@@ -1,0 +1,252 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Waypoint Group Delivery Planning System
+#  DB: Supabase (cloud PostgreSQL) — no local postgres container
+#  Start with: docker compose up --build
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: waypoint
+
+services:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  INFRASTRUCTURE
+  #  NOTE: PostgreSQL is hosted on Supabase — no local postgres container.
+  #        Set SUPABASE_DB_* vars in .env before starting.
+  # ══════════════════════════════════════════════════════════════════════════
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: waypoint-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: waypoint
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI  →  http://localhost:15672
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  AUTH SERVICE  (.NET 8 — Clean Architecture)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: waypoint-auth
+    restart: unless-stopped
+    env_file:
+      - ./services/auth-service/.env
+    expose:
+      - "8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  API GATEWAY  (.NET YARP)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: waypoint-gateway
+    restart: unless-stopped
+    env_file:
+      - ./services/api-gateway/.env
+    expose:
+      - "8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      planning-service:
+        condition: service_healthy
+      loading-delivery-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  PLANNING SERVICE  (Spring Boot — Java 21)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  planning-service:
+    build:
+      context: ./services/planning-service
+      dockerfile: Dockerfile
+    container_name: waypoint-planning
+    restart: unless-stopped
+    env_file:
+      - ./services/planning-service/.env
+    expose:
+      - "8080"
+      - "9090"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  ORDER SERVICE  (Spring Boot — Java 21)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    container_name: waypoint-order
+    restart: unless-stopped
+    env_file:
+      - ./services/order-service/.env
+    volumes:
+      - ./services/order-service/src/main/resources/data:/app/data:ro
+    expose:
+      - "8080"
+      - "9090"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  LOADING & DELIVERY SERVICE  (Go 1.22)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  loading-delivery-service:
+    build:
+      context: ./services/loading-delivery-service
+      dockerfile: Dockerfile
+    container_name: waypoint-loading
+    restart: unless-stopped
+    env_file:
+      - ./services/loading-delivery-service/.env
+    expose:
+      - "8080"
+      - "9090"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  NOTIFICATION SERVICE  (Go 1.22 — WebSocket + RabbitMQ)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: waypoint-notification
+    restart: unless-stopped
+    env_file:
+      - ./services/notification-service/.env
+    expose:
+      - "8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - waypoint-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  NGINX  (SSL termination + React SPA + Reverse Proxy)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./nginx/Dockerfile
+    container_name: waypoint-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Mount real certs in production (override self-signed)
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - waypoint-net
+
+# ══════════════════════════════════════════════════════════════════════════
+#  VOLUMES
+# ══════════════════════════════════════════════════════════════════════════
+
+volumes:
+  rabbitmq_data:
+    name: waypoint_rabbitmq_data
+
+# ══════════════════════════════════════════════════════════════════════════
+#  NETWORKS
+# ══════════════════════════════════════════════════════════════════════════
+
+networks:
+  waypoint-net:
+    name: waypoint-network
+    driver: bridge

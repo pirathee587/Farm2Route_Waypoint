@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package waypoint.planning.v1;
+
+option csharp_namespace = "Waypoint.Planning.Grpc";
+option go_package = "github.com/waypoint/proto/planning/v1;planningv1";
+option java_multiple_files = true;
+option java_package = "com.waypoint.planning.grpc";
+
+// ─────────────────────────────────────────────
+// PlanningService — Order allocation & trip management
+// ─────────────────────────────────────────────
+service PlanningService {
+  // Run allocation engine for a given delivery date
+  rpc AllocateOrders(AllocateOrdersRequest) returns (AllocateOrdersResponse);
+
+  // Get a specific trip with all assigned deliveries
+  rpc GetTrip(GetTripRequest) returns (GetTripResponse);
+
+  // Defer an order to the next available date with a reason
+  rpc DeferOrder(DeferOrderRequest) returns (DeferOrderResponse);
+
+  // List all trips for a given date
+  rpc ListTrips(ListTripsRequest) returns (ListTripsResponse);
+}
+
+// ── Allocate Orders ────────────────────────────
+message AllocateOrdersRequest {
+  // Date to run allocation for (ISO-8601)
+  string delivery_date = 1;
+  // Optional: re-run for specific outlet only
+  string outlet_id = 2;
+  // Whether to force re-allocation of already-allocated orders
+  bool force = 3;
+}
+
+message AllocateOrdersResponse {
+  // Total orders processed
+  int32 total_orders = 1;
+  // Successfully allocated
+  int32 allocated_count = 2;
+  // Deferred due to constraints
+  int32 deferred_count = 3;
+  // Summary per order
+  repeated AllocationResult results = 4;
+}
+
+message AllocationResult {
+  // Order that was processed
+  string order_id = 1;
+  // ALLOCATED | DEFERRED
+  string status = 2;
+  // Assigned vehicle (empty if deferred)
+  string vehicle_id = 3;
+  // Assigned trip UUID (empty if deferred)
+  string trip_id = 4;
+  // Human-readable reason if deferred
+  string deferral_reason = 5;
+  // Which constraint failed: BRAND | TEMP | PARKING | DEPOT | WEIGHT | VOLUME | WINDOW | TRIPS
+  string failed_constraint = 6;
+}
+
+// ── Get Trip ───────────────────────────────────
+message GetTripRequest {
+  string trip_id = 1;
+}
+
+message GetTripResponse {
+  Trip trip = 1;
+}
+
+// ── Defer Order ────────────────────────────────
+message DeferOrderRequest {
+  // Order to defer
+  string order_id = 1;
+  // Human-readable reason (e.g., "No vehicle matches temp requirement")
+  string reason = 2;
+  // Which constraint category failed
+  string constraint_type = 3;
+  // Target date to retry delivery (ISO-8601); empty = system-chosen
+  string retry_date = 4;
+}
+
+message DeferOrderResponse {
+  string order_id = 1;
+  // New status = DEFERRED
+  string status = 2;
+  string retry_date = 3;
+  string message = 4;
+}
+
+// ── List Trips ─────────────────────────────────
+message ListTripsRequest {
+  // Date filter (ISO-8601)
+  string delivery_date = 1;
+  // Filter by vehicle
+  string vehicle_id = 2;
+  // PLANNED | IN_PROGRESS | COMPLETED
+  string status = 3;
+}
+
+message ListTripsResponse {
+  repeated Trip trips = 1;
+  int32 total = 2;
+}
+
+// ── Shared Entity Messages ─────────────────────
+message Trip {
+  // UUID
+  string trip_id = 1;
+  string vehicle_id = 2;
+  string driver_id = 3;
+  // Trip number within the day for this vehicle (1 or 2)
+  int32 trip_number = 4;
+  // ISO-8601 date
+  string delivery_date = 5;
+  // PLANNED | LOADING | IN_PROGRESS | COMPLETED
+  string status = 6;
+  // Ordered list of stop/outlet IDs
+  repeated string stop_sequence = 7;
+  // Total weight loaded
+  double total_weight_kg = 8;
+  // Total volume loaded
+  double total_volume_m3 = 9;
+  // Orders assigned to this trip
+  repeated TripOrder orders = 10;
+}
+
+message TripOrder {
+  string order_id = 1;
+  string outlet_id = 2;
+  // Sequence position in trip
+  int32 stop_index = 3;
+  // Planned arrival (HH:MM)
+  string planned_arrival = 4;
+}

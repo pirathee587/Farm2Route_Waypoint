@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package waypoint.notification.v1;
+
+option csharp_namespace = "Waypoint.Notification.Grpc";
+option go_package = "github.com/waypoint/proto/notification/v1;notificationv1";
+option java_multiple_files = true;
+option java_package = "com.waypoint.notification.grpc";
+
+// ─────────────────────────────────────────────
+// NotificationService — Push alerts & broadcasts
+// ─────────────────────────────────────────────
+service NotificationService {
+  // Send an alert to a specific user or role
+  rpc SendAlert(SendAlertRequest) returns (SendAlertResponse);
+
+  // Broadcast a status update to all clients of specified roles
+  rpc BroadcastStatus(BroadcastStatusRequest) returns (BroadcastStatusResponse);
+
+  // Get notification history for a user
+  rpc GetNotifications(GetNotificationsRequest) returns (GetNotificationsResponse);
+
+  // Mark notifications as read
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+}
+
+// ── Send Alert ─────────────────────────────────
+message SendAlertRequest {
+  // Recipient user UUID (empty if sending by role)
+  string user_id = 1;
+  // Recipient role (used when user_id is empty)
+  // DISPATCHER | LOADER | DRIVER | STORE_MANAGER | ADMIN
+  string target_role = 2;
+  // Notification category
+  // ORDER_DEFERRED | ALLOCATION_COMPLETED | DELIVERY_COMPLETED
+  // | FLAG_RAISED | TRIP_STARTED | TRIP_COMPLETED | SYSTEM
+  string event_type = 3;
+  // Short notification title
+  string title = 4;
+  // Full notification body
+  string body = 5;
+  // Optional JSON payload with context (order_id, trip_id, etc.)
+  string payload_json = 6;
+  // Notification priority: LOW | NORMAL | HIGH | CRITICAL
+  string priority = 7;
+}
+
+message SendAlertResponse {
+  // UUID of the persisted notification record
+  string notification_id = 1;
+  // Whether it was also delivered via WebSocket in real-time
+  bool delivered_realtime = 2;
+  string message = 3;
+}
+
+// ── Broadcast Status ───────────────────────────
+message BroadcastStatusRequest {
+  // Roles to target (can be multiple)
+  repeated string target_roles = 1;
+  // Event type same enum as SendAlertRequest
+  string event_type = 2;
+  string title = 3;
+  string body = 4;
+  // Optional JSON context payload
+  string payload_json = 5;
+  // ISO-8601 datetime — used to deduplicate broadcasts
+  string idempotency_key = 6;
+}
+
+message BroadcastStatusResponse {
+  // Number of active WebSocket clients that received the broadcast
+  int32 clients_reached = 1;
+  // Number of offline users that got a persisted notification
+  int32 persisted_count = 2;
+  string message = 3;
+}
+
+// ── Get Notifications ──────────────────────────
+message GetNotificationsRequest {
+  string user_id = 1;
+  // Whether to return only unread notifications
+  bool unread_only = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message GetNotificationsResponse {
+  repeated Notification notifications = 1;
+  int32 total = 2;
+  int32 unread_count = 3;
+}
+
+// ── Mark Read ──────────────────────────────────
+message MarkReadRequest {
+  string user_id = 1;
+  // Specific notification IDs to mark read; empty = mark all
+  repeated string notification_ids = 2;
+}
+
+message MarkReadResponse {
+  int32 marked_count = 1;
+  string message = 2;
+}
+
+// ── Shared Entity ──────────────────────────────
+message Notification {
+  string notification_id = 1;
+  string user_id = 2;
+  string event_type = 3;
+  string title = 4;
+  string body = 5;
+  string payload_json = 6;
+  bool read = 7;
+  // ISO-8601 datetime
+  string created_at = 8;
+  string read_at = 9;
+}

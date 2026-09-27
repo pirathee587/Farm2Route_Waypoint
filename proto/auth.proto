@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package waypoint.auth.v1;
+
+option csharp_namespace = "Waypoint.Auth.Grpc";
+option go_package = "github.com/waypoint/proto/auth/v1;authv1";
+option java_multiple_files = true;
+option java_package = "com.waypoint.auth.grpc";
+
+// ─────────────────────────────────────────────
+// AuthService — Login, token validation, password reset
+// ─────────────────────────────────────────────
+service AuthService {
+  // Authenticate a user with credentials; returns a signed JWT
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Validate an incoming JWT and return the decoded claims
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+
+  // Initiate a password-reset flow for the given email
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+
+  // Refresh an access token using a valid refresh token
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+}
+
+// ── Login ──────────────────────────────────────
+message LoginRequest {
+  // User's email address
+  string email = 1;
+  // Plain-text password (TLS in transit; never stored)
+  string password = 2;
+}
+
+message LoginResponse {
+  // Signed JWT access token
+  string access_token = 1;
+  // Opaque refresh token
+  string refresh_token = 2;
+  // Unix epoch of access-token expiry
+  int64 expires_at = 3;
+  // Authenticated user metadata
+  UserInfo user = 4;
+}
+
+// ── Token Validation ───────────────────────────
+message ValidateTokenRequest {
+  // Raw JWT string (without "Bearer " prefix)
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  // Whether the token is valid and not expired
+  bool valid = 1;
+  // UUID of the authenticated user
+  string user_id = 2;
+  // User's email address
+  string email = 3;
+  // Role as a string (DISPATCHER | LOADER | DRIVER | STORE_MANAGER | ADMIN)
+  string role = 4;
+  // Unix epoch of token expiry
+  int64 expires_at = 5;
+}
+
+// ── Password Reset ─────────────────────────────
+message ResetPasswordRequest {
+  // Email to send the reset link to
+  string email = 1;
+}
+
+message ResetPasswordResponse {
+  // Human-readable confirmation message
+  string message = 1;
+}
+
+// ── Refresh Token ──────────────────────────────
+message RefreshTokenRequest {
+  // Previously issued refresh token
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  // New access token
+  string access_token = 1;
+  // New refresh token (rotation)
+  string refresh_token = 2;
+  // Unix epoch of new access-token expiry
+  int64 expires_at = 3;
+}
+
+// ── Shared Messages ────────────────────────────
+message UserInfo {
+  // UUID
+  string id = 1;
+  // Full name
+  string name = 2;
+  // Email address
+  string email = 3;
+  // Role string
+  string role = 4;
+  // Whether the account is active
+  bool active = 5;
+}

@@ -1,0 +1,41 @@
+server:
+  http_port: "8080"
+  ws_path: "/ws"
+  env: production
+
+database:
+  host: ${SUPABASE_DB_HOST}
+  port: ${SUPABASE_DB_PORT}
+  name: ${SUPABASE_DB_NAME}
+  user: ${SUPABASE_DB_USER}
+  password: ${SUPABASE_DB_PASSWORD}
+  ssl_mode: require
+  max_open_conns: 5
+  max_idle_conns: 2
+  conn_max_lifetime: 1200
+
+rabbitmq:
+  url: ${RABBITMQ_URL}
+  exchange: waypoint.events
+  queues:
+    order_deferred: order.deferred
+    allocation_completed: allocation.completed
+    delivery_completed: delivery.completed
+    flag_raised: flag.raised
+
+jwt:
+  secret: ${JWT_SECRET}
+  issuer: ${JWT_ISSUER}
+
+supabase:
+  url: ${SUPABASE_URL}
+  service_role_key: ${SUPABASE_SERVICE_ROLE_KEY}
+
+websocket:
+  read_buffer_size:  1024
+  write_buffer_size: 1024
+  ping_interval_sec: 30
+  pong_wait_sec:     60
+
+logging:
+  level: info

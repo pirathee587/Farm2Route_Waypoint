@@ -1,0 +1,2 @@
+﻿# model
+Notification Go struct.

@@ -1,0 +1,155 @@
+syntax = "proto3";
+
+package waypoint.loading.v1;
+
+option csharp_namespace = "Waypoint.Loading.Grpc";
+option go_package = "github.com/waypoint/proto/loading/v1;loadingv1";
+option java_multiple_files = true;
+option java_package = "com.waypoint.loading.grpc";
+
+// ─────────────────────────────────────────────
+// LoadingDeliveryService — Loader & Driver operations
+// ─────────────────────────────────────────────
+service LoadingDeliveryService {
+  // Get the full loading list for a trip (all orders + items)
+  rpc GetLoadingList(GetLoadingListRequest) returns (GetLoadingListResponse);
+
+  // Loader confirms that all items for a trip are loaded
+  rpc ConfirmLoaded(ConfirmLoadedRequest) returns (ConfirmLoadedResponse);
+
+  // Flag a loading issue (missing item, damage, etc.)
+  rpc FlagIssue(FlagIssueRequest) returns (FlagIssueResponse);
+
+  // Driver records a delivery attempt at an outlet
+  rpc RecordDelivery(RecordDeliveryRequest) returns (RecordDeliveryResponse);
+
+  // Sync offline records collected when driver had no connectivity
+  rpc SyncOfflineRecords(SyncOfflineRecordsRequest) returns (SyncOfflineRecordsResponse);
+}
+
+// ── Get Loading List ───────────────────────────
+message GetLoadingListRequest {
+  // Trip UUID
+  string trip_id = 1;
+  // Optional loader user ID for audit trail
+  string loader_id = 2;
+}
+
+message GetLoadingListResponse {
+  string trip_id = 1;
+  string vehicle_id = 2;
+  // ISO-8601 date
+  string delivery_date = 3;
+  // Loading status: PENDING | LOADING | LOADED
+  string status = 4;
+  repeated LoadingItem items = 5;
+}
+
+message LoadingItem {
+  string order_id = 1;
+  string outlet_id = 2;
+  string outlet_name = 3;
+  string product_code = 4;
+  int32 quantity = 5;
+  double weight_kg = 6;
+  // Whether this item has been physically scanned/confirmed
+  bool confirmed = 7;
+}
+
+// ── Confirm Loaded ─────────────────────────────
+message ConfirmLoadedRequest {
+  string trip_id = 1;
+  string loader_id = 2;
+  // Confirmed item list (may be partial)
+  repeated string confirmed_order_ids = 3;
+  // Any items NOT loaded (with reason)
+  repeated UnloadedItem unloaded_items = 4;
+  // ISO-8601 datetime when loading was completed
+  string loaded_at = 5;
+}
+
+message UnloadedItem {
+  string order_id = 1;
+  // OUT_OF_STOCK | DAMAGED | MISSING | OTHER
+  string reason = 2;
+  string notes = 3;
+}
+
+message ConfirmLoadedResponse {
+  string trip_id = 1;
+  // New trip status: LOADED
+  string status = 2;
+  string message = 3;
+}
+
+// ── Flag Issue ─────────────────────────────────
+message FlagIssueRequest {
+  string trip_id = 1;
+  string order_id = 2;
+  string flagged_by = 3;
+  // DAMAGE | SHORTAGE | WRONG_ITEM | TEMPERATURE | OTHER
+  string issue_type = 4;
+  string description = 5;
+  // Optional image URL / reference
+  string evidence_url = 6;
+}
+
+message FlagIssueResponse {
+  string issue_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+// ── Record Delivery ────────────────────────────
+message RecordDeliveryRequest {
+  string trip_id = 1;
+  string order_id = 2;
+  string driver_id = 3;
+  string outlet_id = 4;
+  // DELIVERED | ATTEMPTED | NOT_HOME | REFUSED | PARTIAL
+  string outcome = 5;
+  // ISO-8601 datetime of arrival
+  string arrived_at = 6;
+  // ISO-8601 datetime of departure
+  string departed_at = 7;
+  // Proof of delivery: signature image URL, photo URL
+  string pod_url = 8;
+  // Recipient name at outlet
+  string received_by = 9;
+  // Driver's free-text notes
+  string notes = 10;
+  // Lat/lng of the delivery location
+  double lat = 11;
+  double lng = 12;
+  // Client-generated idempotency key for offline sync
+  string operation_id = 13;
+}
+
+message RecordDeliveryResponse {
+  string delivery_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+// ── Sync Offline Records ───────────────────────
+message SyncOfflineRecordsRequest {
+  string driver_id = 1;
+  // Batch of delivery records captured offline
+  repeated RecordDeliveryRequest records = 2;
+}
+
+message SyncOfflineRecordsResponse {
+  // Number of records successfully synced
+  int32 synced_count = 1;
+  // Record operation_ids that failed (duplicate or invalid)
+  repeated string failed_operation_ids = 2;
+  // Conflict results where server state differed
+  repeated ConflictResult conflicts = 3;
+}
+
+message ConflictResult {
+  string operation_id = 1;
+  // DUPLICATE | STATE_MISMATCH | RESOLVED
+  string resolution = 2;
+  string message = 3;
+}
