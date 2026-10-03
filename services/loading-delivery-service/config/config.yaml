@@ -18,7 +18,7 @@ rabbitmq:
   url: ${RABBITMQ_URL}
   exchange: waypoint.events
   queues:
-    allocation_completed: loading.allocation
+    allocation_completed: allocation.completed
     delivery_completed: delivery.completed
     flag_raised: flag.raised
   routing_keys:
