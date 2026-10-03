@@ -1,7 +1,0 @@
-package com.waypoint.planning.service;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;import org.springframework.beans.factory.annotation.Value;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.scheduling.annotation.Scheduled;import org.springframework.stereotype.Component;import java.util.*;
-@Component public class OutboxPublisher {
-  private final JdbcTemplate jdbc;private final RabbitTemplate rabbit;private final boolean enabled;
-  public OutboxPublisher(JdbcTemplate j,RabbitTemplate r,@Value("${waypoint.outbox.enabled:true}")boolean e){jdbc=j;rabbit=r;enabled=e;}
-  @Scheduled(fixedDelayString="${waypoint.outbox.poll-ms:500}") public void publish(){if(!enabled)return;for(var row:jdbc.queryForList("SELECT id,routing_key,payload::text FROM public.planning_outbox WHERE status='PENDING' ORDER BY created_at LIMIT 20")){UUID id=(UUID)row.get("id");try{rabbit.convertAndSend("waypoint.events",(String)row.get("routing_key"),row.get("payload"),m->{m.getMessageProperties().setContentType("application/json");return m;});jdbc.update("UPDATE public.planning_outbox SET status='PUBLISHED',published_at=NOW() WHERE id=?",id);}catch(Exception e){jdbc.update("UPDATE public.planning_outbox SET attempts=attempts+1,status=CASE WHEN attempts>=4 THEN 'FAILED' ELSE 'PENDING' END WHERE id=?",id);}}}
-}

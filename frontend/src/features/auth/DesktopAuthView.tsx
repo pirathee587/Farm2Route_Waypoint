@@ -380,36 +380,9 @@ export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
                     fontSize: '12px',
                     lineHeight: '1.45',
                     color: '#475569',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
                   }}
                 >
-                  <div>
-                    This portal is for Loader accounts. Dispatcher/Driver/Store Manager use their own login link.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('kumar.s@waypoint.com');
-                      setPassword('loader123');
-                    }}
-                    style={{
-                      alignSelf: 'flex-start',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      backgroundColor: '#FEF3C7',
-                      color: '#92400E',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: '1px solid #FDE68A',
-                    }}
-                  >
-                    <span>⚡ Quick Fill: kumar.s@waypoint.com</span>
-                  </button>
+                  This portal is for Loader accounts. Dispatcher/Driver/Store Manager use their own login link.
                 </div>
               </form>
             </div>
