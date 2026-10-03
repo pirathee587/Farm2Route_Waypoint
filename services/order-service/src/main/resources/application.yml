@@ -1,30 +1,118 @@
 spring:
   application:
     name: order-service
+
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://${SUPABASE_DB_HOST:localhost}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=${DB_SSLMODE:disable}}
-    username: ${SUPABASE_DB_USER:postgres}
-    password: ${SUPABASE_DB_PASSWORD:postgrespassword}
+    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: OrderHikariPool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-test-query: SELECT 1
+
   flyway:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 0
     table: flyway_order_history
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+        format_sql: true
+    open-in-view: false
+
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:waypoint}
-    password: ${RABBITMQ_PASSWORD:waypoint}
-    virtual-host: ${RABBITMQ_VHOST:waypoint}
-    listener.simple:
-      acknowledge-mode: manual
-      prefetch: 10
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: waypoint
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          multiplier: 2.0
+
 server:
-  port: ${SERVER_PORT:8080}
-management.endpoints.web.exposure.include: health,info,metrics
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+grpc:
+  server:
+    port: 9090
+    security:
+      enabled: ${GRPC_TLS_ENABLED:false}
+      certificateChain: ${GRPC_TLS_CERTIFICATE_CHAIN:}
+      privateKey: ${GRPC_TLS_PRIVATE_KEY:}
+      trustCertCollection: ${GRPC_TLS_TRUST_CERT_COLLECTION:}
+      clientAuth: ${GRPC_TLS_CLIENT_AUTH:REQUIRE}
+  client:
+    planning-service:
+      address: static://${PLANNING_SERVICE_GRPC_HOST:planning-service}:${PLANNING_SERVICE_GRPC_PORT:9090}
+      negotiationType: plaintext
+
 waypoint:
   timezone: Asia/Colombo
   cutoff: "16:00"
   outbox:
     enabled: ${OUTBOX_ENABLED:true}
     poll-ms: ${OUTBOX_POLL_MS:500}
+  rabbitmq:
+    exchange: waypoint.events
+    queues:
+      order-placed: order.placed
+      allocation-completed: allocation.completed
+      order-deferred: order-service.order-deferred
+      delivery-completed: order-service.delivery-completed
+    routing-keys:
+      order-placed: order.placed
+      allocation-completed: allocation.completed
+      order-deferred: order.deferred
+      delivery-completed: delivery.completed
+  seed:
+    data-path: ${SEED_DATA_PATH:/app/data}
+    enabled: true
+
+logging:
+  level:
+    com.waypoint: INFO
+    org.springframework.amqp: WARN
+    org.hibernate.SQL: WARN
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  jpa:
+    show-sql: false
+logging:
+  level:
+    com.waypoint: INFO
+    org.springframework.amqp: WARN
+    org.hibernate.SQL: WARN
