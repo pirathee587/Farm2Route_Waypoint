@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, LogOut } from 'lucide-react';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
 
-export const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  onLoginSuccess?: (email: string) => void;
+}
+
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [screen, setScreen] = useState<AuthScreen>('login');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
-  const [loggedInUser, setLoggedInUser] = useState<{ email: string } | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -17,7 +19,9 @@ export const LoginPage: React.FC = () => {
   }, []);
 
   const handleLoginSuccess = (email: string) => {
-    setLoggedInUser({ email });
+    if (onLoginSuccess) {
+      onLoginSuccess(email);
+    }
   };
 
   return (
@@ -36,49 +40,7 @@ export const LoginPage: React.FC = () => {
         overflow: 'hidden',
       }}
     >
-      {/* Logged in success banner */}
-      {loggedInUser && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            zIndex: 90,
-            backgroundColor: '#10B981',
-            color: '#FFFFFF',
-            padding: '12px 20px',
-            borderRadius: '14px',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            fontSize: '14px',
-            fontWeight: 600,
-          }}
-        >
-          <CheckCircle2 size={18} />
-          <span>Signed in as {loggedInUser.email} (Loader Account)</span>
-          <button
-            type="button"
-            onClick={() => setLoggedInUser(null)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              color: '#FFFFFF',
-              padding: '4px 10px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              marginLeft: '8px',
-            }}
-          >
-            <LogOut size={13} />
-            Sign out
-          </button>
-        </div>
-      )}
-
-      {/* Automatic Responsive View */}
+      {/* Automatic Responsive View: Mobile/Tablet vs Desktop */}
       {isMobile ? (
         <div style={{ width: '100%', minHeight: '100vh' }}>
           <MobileAuthView
@@ -97,3 +59,5 @@ export const LoginPage: React.FC = () => {
     </div>
   );
 };
+
+export default LoginPage;

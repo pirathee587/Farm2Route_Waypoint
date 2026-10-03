@@ -1,0 +1,6 @@
+outlet_id,delivery_date,is_delivery_day,notes
+S1-FRESH-01,2026-10-04,true,S1 peak day
+S1-FRESH-02,2026-10-04,true,S1 peak day
+S1-STYLE-01,2026-10-04,true,S1 peak day
+S1-TECH-01,2026-10-04,true,S1 peak day
+S1-VAN-01,2026-10-04,true,S1 peak day
