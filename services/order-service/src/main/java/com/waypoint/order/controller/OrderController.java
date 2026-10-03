@@ -1,0 +1,14 @@
+package com.waypoint.order.controller;
+import com.waypoint.order.dto.OrderModels.*;import com.waypoint.order.exception.ApiException;import com.waypoint.order.service.OrderService;import jakarta.servlet.http.HttpServletRequest;import jakarta.validation.Valid;import org.springframework.http.*;import org.springframework.web.bind.MethodArgumentNotValidException;import org.springframework.web.bind.annotation.*;import java.util.*;
+@RestController public class OrderController {private final OrderService service;public OrderController(OrderService s){service=s;}
+ @PostMapping("/api/orders") @ResponseStatus(HttpStatus.CREATED) PlaceOrderResponse place(@Valid @RequestBody PlaceOrderRequest b,HttpServletRequest r){return service.place(user(r),role(r),b);}
+ @GetMapping("/api/orders") List<OrderView> list(@RequestParam(required=false)String status,HttpServletRequest r){return service.list(user(r),role(r),status);}
+ @GetMapping("/api/orders/{id}") OrderView get(@PathVariable UUID id,HttpServletRequest r){return service.get(id,user(r),role(r));}
+ @GetMapping("/api/orders/{id}/eta") Map<String,Object> eta(@PathVariable UUID id,HttpServletRequest r){return service.eta(id,user(r),role(r));}
+ @PostMapping("/api/orders/{id}/receipt") Map<String,Object> receipt(@PathVariable UUID id,@Valid @RequestBody ReceiptRequest b,HttpServletRequest r){service.receipt(id,user(r),role(r),b);return Map.of("orderId",id,"status","RECEIPT_CONFIRMED");}
+ @PostMapping("/api/orders/{id}/issues") @ResponseStatus(HttpStatus.CREATED) Map<String,Object> issue(@PathVariable UUID id,@Valid @RequestBody IssueRequest b,HttpServletRequest r){return Map.of("flagId",service.issue(id,user(r),role(r),b),"status","RAISED");}
+ @GetMapping("/api/outlets/me") Map<String,Object> me(HttpServletRequest r){return service.myOutlet(user(r),role(r));}@GetMapping("/api/outlets") List<Map<String,Object>> outlets(HttpServletRequest r){return service.outlets(role(r));}@GetMapping("/api/vehicles") List<Map<String,Object>> vehicles(HttpServletRequest r){return service.vehicles(role(r));}
+ private UUID user(HttpServletRequest r){try{return UUID.fromString(r.getHeader("X-User-Id"));}catch(Exception e){throw new ApiException(HttpStatus.UNAUTHORIZED,"USER_HEADER_REQUIRED","Valid X-User-Id required");}}private String role(HttpServletRequest r){return Objects.toString(r.getHeader("X-User-Role"),"").toUpperCase();}
+ @ExceptionHandler(ApiException.class) ResponseEntity<Map<String,Object>> api(ApiException e){var x=new LinkedHashMap<String,Object>();x.put("code",e.code);x.put("message",e.getMessage());x.putAll(e.extra);return ResponseEntity.status(e.status).body(x);}
+ @ExceptionHandler(MethodArgumentNotValidException.class) @ResponseStatus(HttpStatus.BAD_REQUEST) Map<String,Object> invalid(MethodArgumentNotValidException e){return Map.of("code","VALIDATION_ERROR","message",e.getBindingResult().getAllErrors().getFirst().getDefaultMessage());}
+}

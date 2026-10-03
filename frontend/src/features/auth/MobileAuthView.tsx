@@ -276,6 +276,31 @@ export const MobileAuthView: React.FC<MobileAuthViewProps> = ({
                 {isSubmitting ? 'Signing in...' : 'Sign in'}
               </button>
 
+              {/* Demo Loader quick-fill */}
+              <div style={{ textAlign: 'center', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('kumar.s@waypoint.com');
+                    setPassword('loader123');
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF3C7',
+                    color: '#92400E',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    border: '1px solid #FDE68A',
+                  }}
+                >
+                  ⚡ Quick Fill: kumar.s@waypoint.com
+                </button>
+              </div>
+
               {/* Need access? Contact your administrator */}
               <div
                 style={{

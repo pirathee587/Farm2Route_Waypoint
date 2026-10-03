@@ -1,85 +1,30 @@
 spring:
   application:
     name: order-service
-
-  # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
   datasource:
-    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
-    username: ${SUPABASE_DB_USER}
-    password: ${SUPABASE_DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      pool-name: OrderHikariPool
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout: 20000
-      idle-timeout: 300000
-      max-lifetime: 1200000
-      connection-test-query: SELECT 1
-
-  # ── JPA ──────────────────────────────────────────────────────────────────
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        default_schema: public
-    open-in-view: false
-
-  # ── RabbitMQ ─────────────────────────────────────────────────────────────
+    url: ${DATABASE_URL:jdbc:postgresql://${SUPABASE_DB_HOST:localhost}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=${DB_SSLMODE:disable}}
+    username: ${SUPABASE_DB_USER:postgres}
+    password: ${SUPABASE_DB_PASSWORD:postgrespassword}
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    table: flyway_order_history
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:waypoint}
-    password: ${RABBITMQ_PASSWORD}
-    virtual-host: waypoint
-    listener:
-      simple:
-        acknowledge-mode: manual
-        prefetch: 10
-
-# ── Server ───────────────────────────────────────────────────────────────
+    password: ${RABBITMQ_PASSWORD:waypoint}
+    virtual-host: ${RABBITMQ_VHOST:waypoint}
+    listener.simple:
+      acknowledge-mode: manual
+      prefetch: 10
 server:
   port: ${SERVER_PORT:8080}
-  shutdown: graceful
-
-# ── Actuator ────────────────────────────────────────────────────────────
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics
-  endpoint:
-    health:
-      show-details: always
-
-# ── gRPC (Planning Service connection) ───────────────────────────────────
-grpc:
-  planning-service:
-    host: ${PLANNING_SERVICE_GRPC_HOST:planning-service}
-    port: ${PLANNING_SERVICE_GRPC_PORT:9090}
-
-# ── CSV Seed Data ─────────────────────────────────────────────────────────
+management.endpoints.web.exposure.include: health,info,metrics
 waypoint:
-  seed:
-    data-path: ${SEED_DATA_PATH:/app/data}
-    enabled: true
-  cutoff:
-    hour: 16       # 4PM cutoff for same-day orders
-    minute: 0
-  rabbitmq:
-    exchange: waypoint.events
-    queues:
-      order-placed: order.placed
-      allocation-completed: allocation.completed
-    routing-keys:
-      order-placed: order.placed
-
-# ── Logging ──────────────────────────────────────────────────────────────
-logging:
-  level:
-    com.waypoint: INFO
-    org.springframework.amqp: WARN
-    org.hibernate.SQL: WARN
+  timezone: Asia/Colombo
+  cutoff: "16:00"
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+    poll-ms: ${OUTBOX_POLL_MS:500}
