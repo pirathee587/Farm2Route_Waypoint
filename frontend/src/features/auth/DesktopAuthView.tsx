@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Check, ArrowLeft } from 'lucide-react';
 import { WaypointDesktopLogo } from '@/shared/components/Logos';
 import { DesktopRightPanel } from './AuthIllustration';
-import { authApi, LoginCredentials } from './authApi';
+import { authApi, LoginCredentials, AuthUser } from './authApi';
 
 export type AuthScreen = 'login' | 'forgot-password' | 'check-email';
 
 interface DesktopAuthViewProps {
   screen: AuthScreen;
   setScreen: (screen: AuthScreen) => void;
-  onLoginSuccess?: (email: string) => void;
+  onLoginSuccess?: (user: AuthUser) => void;
 }
 
 export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
@@ -39,7 +39,7 @@ export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
     setIsSubmitting(false);
 
     if (res.success) {
-      if (onLoginSuccess) onLoginSuccess(email);
+      if (onLoginSuccess && res.user) onLoginSuccess(res.user);
     } else {
       setLoginError(res.errorMessage || 'Incorrect email or password');
     }

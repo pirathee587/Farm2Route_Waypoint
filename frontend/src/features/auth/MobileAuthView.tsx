@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Radio, ShieldCheck, Check, ArrowLeft } from 'lucide-react';
 import { WaypointMobileHexLogo } from '@/shared/components/Logos';
 import { MobileTopMapBackground } from './AuthIllustration';
-import { authApi } from './authApi';
+import { authApi, AuthUser } from './authApi';
 import { AuthScreen } from './DesktopAuthView';
 
 interface MobileAuthViewProps {
   screen: AuthScreen;
   setScreen: (screen: AuthScreen) => void;
-  onLoginSuccess?: (email: string) => void;
+  onLoginSuccess?: (user: AuthUser) => void;
 }
 
 export const MobileAuthView: React.FC<MobileAuthViewProps> = ({
@@ -37,7 +37,7 @@ export const MobileAuthView: React.FC<MobileAuthViewProps> = ({
     setIsSubmitting(false);
 
     if (res.success) {
-      if (onLoginSuccess) onLoginSuccess(email);
+      if (onLoginSuccess && res.user) onLoginSuccess(res.user);
     } else {
       setLoginError(res.errorMessage || 'Incorrect email or password');
     }

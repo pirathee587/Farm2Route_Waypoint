@@ -620,3 +620,42 @@ func (h *LoaderHandler) GetShortfalls(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
+
+func (h *LoaderHandler) ResolveShortfall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := middleware.GetUserFromContext(r.Context())
+	if !ok || (user.Role != "DISPATCHER" && user.Role != "ADMIN") {
+		model.ErrForbidden("Forbidden: only dispatchers can resolve shortfalls").WriteJSON(w)
+		return
+	}
+	var payload struct {
+		Notes string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		model.ErrBadRequest("Invalid request body").WriteJSON(w)
+		return
+	}
+	if len(strings.TrimSpace(payload.Notes)) > 500 {
+		model.ErrBadRequest("notes cannot exceed 500 characters").WriteJSON(w)
+		return
+	}
+	issueID := r.PathValue("issueId")
+	if issueID == "" {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) >= 5 {
+			issueID = parts[3]
+		}
+	}
+	if err := h.loadingService.ResolveShortfall(r.Context(), issueID, user.UserID, strings.TrimSpace(payload.Notes)); err != nil {
+		if appErr, ok := err.(*model.AppError); ok {
+			appErr.WriteJSON(w)
+			return
+		}
+		model.ErrInternal(err.Error()).WriteJSON(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

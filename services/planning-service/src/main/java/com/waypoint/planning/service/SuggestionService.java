@@ -18,7 +18,8 @@ public class SuggestionService {
         for(VehicleRef v:refs.listVehicles()){
             if(!v.available()||repo.tripCount(v.vehicleId(),date)>=2)continue;
             for(int route=repo.tripCount(v.vehicleId(),date);route<2 && !remaining.isEmpty();route++){
-                List<OrderRef> candidates=remaining.stream().filter(o->compatibleBase(o,v)).sorted(Comparator.comparing(OrderRef::windowClose)).toList();
+                List<OrderRef> candidates=remaining.stream().filter(o->compatibleBase(o,v))
+                        .sorted(Comparator.comparing(OrderRef::windowClose, Comparator.nullsLast(Comparator.naturalOrder()))).toList();
                 if(candidates.isEmpty())break; List<OrderRef> chosen=new ArrayList<>(); ValidationResult last=null;
                 for(OrderRef o:candidates){List<OrderRef> test=new ArrayList<>(chosen);test.add(o);var vr=engine.validate(test,v,date,List.of());if(vr.feasible()){chosen.add(o);last=vr;}}
                 if(chosen.isEmpty())break; trips.add(new SuggestedTrip(v.vehicleId(),chosen.stream().map(OrderRef::orderId).toList(),last)); remaining.removeAll(chosen);
@@ -26,5 +27,8 @@ public class SuggestionService {
         }
         return new SuggestionResponse(date,List.copyOf(trips),remaining.stream().map(OrderRef::orderId).toList());
     }
-    private boolean compatibleBase(OrderRef o,VehicleRef v){return o.depot().equalsIgnoreCase(v.depot())&&o.brand().equalsIgnoreCase(v.brand());}
+    private boolean compatibleBase(OrderRef o,VehicleRef v){
+        return o.depot()!=null && v.depot()!=null && o.brand()!=null && v.brand()!=null
+                && o.depot().equalsIgnoreCase(v.depot()) && o.brand().equalsIgnoreCase(v.brand());
+    }
 }

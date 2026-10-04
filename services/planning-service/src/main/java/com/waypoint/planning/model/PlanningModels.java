@@ -50,7 +50,10 @@ public final class PlanningModels {
         public LocalDate resolvedDate(){return nextPlannedDate!=null?nextPlannedDate:retryDate;}
     }
     public record DeferralView(UUID deferralId, UUID orderId, LocalDate deliveryDate, String reason,
-                               String constraintType, LocalDate retryDate, boolean notified, Instant createdAt) {}
+                               String constraintType, LocalDate retryDate, boolean notified, Instant createdAt,
+                               String outletName, String district, String depot, String brand,
+                               String tempRequirement, double weightKg, double volumeM3,
+                               LocalTime windowOpen, LocalTime windowClose) {}
 
     public record UpdateNextPlannedDateRequest(LocalDate nextPlannedDate,String reasonForChange) {}
 
