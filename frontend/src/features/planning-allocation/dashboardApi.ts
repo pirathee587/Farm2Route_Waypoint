@@ -1,6 +1,6 @@
 // ============================================================
 // Dashboard API — Fetches from /api/planning/dashboard
-// Falls back to mock data if backend is unavailable.
+// Planning counters come only from the Planning Service.
 // ============================================================
 
 import type { DashboardData } from '@/entities/dashboard/dashboardTypes';
@@ -119,6 +119,13 @@ export const mockDashboardData: DashboardData = {
   ],
 };
 
+export const emptyDashboardData: DashboardData = {
+  source: 'REAL_API',
+  date: '',
+  summary: { totalOrders:0, unplannedOrders:0, plannedOrders:0, deferredOrders:0, activeTrips:0, availableVehicles:0, totalVehicles:0, availableReefers:0, totalReefers:0, issuesCount:0, inTransitVehicles:0, loadingVehicles:0, unavailableVehicles:0, plannedPercent:0 },
+  attentionItems: [], activeTrips: [], recentActivity: [],
+};
+
 // ── API Response Type ────────────────────────────────────────
 
 interface DashboardApiResponse {
@@ -136,7 +143,6 @@ interface DashboardApiResponse {
 // ── API Fetch ────────────────────────────────────────────────
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-  try {
     const response = await fetch('/api/planning/dashboard', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -144,8 +150,9 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     });
 
     if (!response.ok) {
-      console.warn('[DashboardAPI] Backend returned non-OK status, using mock data.');
-      return mockDashboardData;
+      let message = `Unable to load dashboard (${response.status}).`;
+      try { message = ((await response.json()) as {message?:string}).message || message; } catch { /* gateway response */ }
+      throw new Error(message);
     }
 
     const apiData: DashboardApiResponse = await response.json();
@@ -157,7 +164,6 @@ export async function fetchDashboardData(): Promise<DashboardData> {
       activeTrips: [],
       recentActivity: [],
       summary: {
-        ...mockDashboardData.summary,
         totalOrders: apiData.totalOrders,
         unplannedOrders: apiData.unplannedOrders,
         plannedOrders: apiData.plannedOrders,
@@ -171,10 +177,10 @@ export async function fetchDashboardData(): Promise<DashboardData> {
           apiData.totalOrders > 0
             ? Math.round((apiData.plannedOrders / apiData.totalOrders) * 100)
             : 0,
+        issuesCount: 0,
+        inTransitVehicles: 0,
+        loadingVehicles: 0,
+        unavailableVehicles: Math.max(0, apiData.totalVehicles - apiData.availableVehicles),
       },
     };
-  } catch {
-    console.warn('[DashboardAPI] Could not reach backend, using mock data.');
-    return mockDashboardData;
-  }
 }

@@ -14,7 +14,7 @@ import {
   TodaysPlanningPanel,
 } from './RightPanelSections';
 import { RecentActivitySection } from './RecentActivitySection';
-import { fetchDashboardData, mockDashboardData } from '@/features/planning-allocation/dashboardApi';
+import { fetchDashboardData, emptyDashboardData } from '@/features/planning-allocation/dashboardApi';
 import type { DashboardData } from '@/entities/dashboard/dashboardTypes';
 
 // ── Page Header ──────────────────────────────────────────────
@@ -90,8 +90,9 @@ interface DispatcherDashboardPageProps {
 
 export const DispatcherDashboardPage: React.FC<DispatcherDashboardPageProps> = ({ onNavigateGlobal }) => {
   const [activePage, setActivePage] = useState<DispatcherPage>('dashboard');
-  const [data, setData] = useState<DashboardData>(mockDashboardData);
+  const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,7 +102,7 @@ export const DispatcherDashboardPage: React.FC<DispatcherDashboardPageProps> = (
         setData(result);
         setLoading(false);
       }
-    });
+    }).catch((error: unknown) => { if (!cancelled) { setLoadError(error instanceof Error ? error.message : 'Unable to load dashboard.'); setLoading(false); } });
     return () => {
       cancelled = true;
     };
@@ -136,6 +137,7 @@ export const DispatcherDashboardPage: React.FC<DispatcherDashboardPageProps> = (
         }}
         className="dashboard-content"
       >
+        {loadError && <div style={{marginBottom:'16px',padding:'10px 14px',borderRadius:'8px',background:'#FEF2F2',color:'#B91C1C',fontSize:'12px',fontWeight:600}}>{loadError}</div>}
         {/* Loading overlay */}
         {loading && (
           <div

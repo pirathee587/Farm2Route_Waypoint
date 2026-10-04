@@ -2,6 +2,7 @@ package com.waypoint.planning.repository;
 
 import com.waypoint.planning.exception.PlanningException;
 import com.waypoint.planning.model.PlanningModels.*;
+import com.waypoint.planning.port.PlanningMasterDataPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import java.sql.*;
@@ -9,7 +10,7 @@ import java.time.*;
 import java.util.*;
 
 @Repository
-public class ReferenceRepository {
+public class ReferenceRepository implements PlanningMasterDataPort {
     private final JdbcTemplate jdbc;
     public ReferenceRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
@@ -26,12 +27,12 @@ public class ReferenceRepository {
 
     public OrderRef getOrder(UUID id) {
         var l = jdbc.query("""
-            SELECT o.order_id,o.outlet_id,x.name outlet_name,x.district,x.depot,x.parking_type,
+            SELECT o.id AS order_id,o.outlet_id,x.name outlet_name,x.district,x.depot,x.parking_type,
                    x.lat::double precision lat,x.lng::double precision lng,o.product_code,o.quantity,
                    o.weight_kg::double precision weight_kg,o.volume_m3::double precision volume_m3,
                    o.brand,o.temp_requirement::text temp_requirement,o.preferred_date,o.window_open,o.window_close,
                    o.status::text order_status
-            FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id WHERE o.order_id=?
+            FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id WHERE o.id=?
             """, this::mapOrder, id);
         if(l.isEmpty()) throw new PlanningException(404,"Order not found: "+id);
         return l.getFirst();
@@ -44,7 +45,7 @@ public class ReferenceRepository {
 
     public List<OrderRef> listPlanningOrders(LocalDate date) {
         return jdbc.query("""
-            SELECT o.order_id,o.outlet_id,x.name outlet_name,x.district,x.depot,x.parking_type,
+            SELECT o.id AS order_id,o.outlet_id,x.name outlet_name,x.district,x.depot,x.parking_type,
                    x.lat::double precision lat,x.lng::double precision lng,o.product_code,o.quantity,
                    o.weight_kg::double precision weight_kg,o.volume_m3::double precision volume_m3,
                    o.brand,o.temp_requirement::text temp_requirement,o.preferred_date,o.window_open,o.window_close,

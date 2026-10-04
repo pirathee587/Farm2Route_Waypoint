@@ -1,21 +1,18 @@
 package com.waypoint.planning.service;
 
-import com.waypoint.planning.model.PlanningModels.*;
-import com.waypoint.planning.repository.*;
-import com.waypoint.planning.messaging.PlanningEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import java.time.*;import java.util.*;
+import com.fasterxml.jackson.core.JsonProcessingException;import com.fasterxml.jackson.databind.ObjectMapper;import com.waypoint.planning.entity.*;import com.waypoint.planning.exception.PlanningException;import com.waypoint.planning.jpa.*;import com.waypoint.planning.messaging.PlanningEventPublisher;import com.waypoint.planning.model.PlanningModels.*;import com.waypoint.planning.port.PlanningMasterDataPort;
+import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;import java.time.*;import java.util.*;
 
 @Service
 public class DeferralService {
-    private final ReferenceRepository refs; private final PlanningRepository repo; private final PlanningEventPublisher events;
-    public DeferralService(ReferenceRepository refs,PlanningRepository repo,PlanningEventPublisher events){this.refs=refs;this.repo=repo;this.events=events;}
-    @Transactional public UUID defer(UUID orderId,DeferralRequest r,String userId){
-        var o=refs.getOrder(orderId); LocalDate retry=r.retryDate()==null?o.preferredDate().plusDays(1):r.retryDate();
-        String type=normalize(r.constraintType()); UUID id=repo.defer(orderId,o.preferredDate(),r.reason(),type,retry,userId); events.orderDeferred(orderId,r.reason(),type,retry);return id;
-    }
-    @Transactional public void returnToPlanning(UUID orderId){refs.getOrder(orderId);repo.returnToPlanning(orderId);}
-    public List<DeferralView> list(LocalDate d){return repo.listDeferrals(d);}
-    private String normalize(String s){if(s==null)return "NONE";return switch(s.toUpperCase()){case "TEMPERATURE"->"TEMP";case "DELIVERY_WINDOW"->"WINDOW";case "VEHICLE","DISTRICT","FUEL"->"NONE";default->s.toUpperCase();};}
+ private final PlanningMasterDataPort master;private final AllocationJpaRepository allocations;private final DeferralRecordJpaRepository deferrals;private final PlanningDecisionJpaRepository decisions;private final PlanningEventPublisher events;private final ObjectMapper json;
+ public DeferralService(PlanningMasterDataPort master,AllocationJpaRepository allocations,DeferralRecordJpaRepository deferrals,PlanningDecisionJpaRepository decisions,PlanningEventPublisher events,ObjectMapper json){this.master=master;this.allocations=allocations;this.deferrals=deferrals;this.decisions=decisions;this.events=events;this.json=json;}
+
+ @Transactional public UUID defer(UUID orderId,DeferralRequest request,String userId){OrderRef order=master.getOrder(orderId);if(!"PENDING".equalsIgnoreCase(order.orderStatus()))throw new PlanningException(409,"Order is not eligible for deferral from status "+order.orderStatus());if(activeDeferral(orderId).isPresent())throw new PlanningException(409,"Order is already deferred");if(allocations.findActiveByOrderId(orderId,List.of(AllocationStatus.TENTATIVE,AllocationStatus.ALLOCATED)).isPresent())throw new PlanningException(409,"Order has an active trip allocation");LocalDate next=request.resolvedDate()==null?order.preferredDate().plusDays(1):request.resolvedDate();if(!next.isAfter(order.preferredDate()))throw new PlanningException(400,"nextPlannedDate must be after the current planning date");String reason=request.resolvedReason();if(reason==null||reason.isBlank())throw new PlanningException(400,"A deferral reason is required");String constraint=normalize(request.constraintType());allocations.save(AllocationEntity.deferred(orderId,reason,next,userId));DeferralRecordEntity record=deferrals.save(new DeferralRecordEntity(orderId,order.preferredDate(),reason,constraint,next,request.operationalNote()));decisions.save(new PlanningDecisionEntity(orderId,null,"ORDER_DEFERRED",details(Map.of("reasonCode",nvl(request.reasonCode()),"reason",reason,"nextPlannedDate",next.toString(),"operationalNote",nvl(request.operationalNote())))));events.orderDeferred(orderId,reason,constraint,next);return record.getId();}
+ @Transactional public void updateNextDate(UUID orderId,UpdateNextPlannedDateRequest request){master.getOrder(orderId);if(request.nextPlannedDate()==null||!request.nextPlannedDate().isAfter(LocalDate.now()))throw new PlanningException(400,"nextPlannedDate must be in the future");AllocationEntity allocation=activeDeferral(orderId).orElseThrow(()->new PlanningException(409,"Order is not currently deferred"));DeferralRecordEntity record=activeRecord(orderId);allocation.changeRetryDate(request.nextPlannedDate());record.changeDate(request.nextPlannedDate());decisions.save(new PlanningDecisionEntity(orderId,null,"DEFERRAL_DATE_CHANGED",details(Map.of("nextPlannedDate",request.nextPlannedDate().toString(),"reason",nvl(request.reasonForChange())))));}
+ @Transactional public void returnToPlanning(UUID orderId){master.getOrder(orderId);AllocationEntity allocation=activeDeferral(orderId).orElseThrow(()->new PlanningException(409,"Order is not deferred"));DeferralRecordEntity record=activeRecord(orderId);allocation.returnToPlanning();record.resolve();decisions.save(new PlanningDecisionEntity(orderId,null,"RETURNED_TO_PLANNING","{}"));}
+ @Transactional(readOnly=true) public List<DeferralView> list(LocalDate date){return deferrals.findByDeliveryDateAndStatusOrderByCreatedAtDesc(date,"ACTIVE").stream().map(d->new DeferralView(d.getId(),d.getOrderId(),d.getDeliveryDate(),d.getReason(),d.getConstraintType(),d.getNextPlannedDate(),d.isNotified(),d.getCreatedAt())).toList();}
+ private Optional<AllocationEntity> activeDeferral(UUID id){return allocations.findFirstByOrderIdAndStatusOrderByIdDesc(id,AllocationStatus.DEFERRED);}private DeferralRecordEntity activeRecord(UUID id){return deferrals.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(id,"ACTIVE").orElseThrow(()->new PlanningException(409,"Active deferral history is missing"));}
+ private String normalize(String value){if(value==null)return "NONE";return switch(value.toUpperCase()){case "TEMPERATURE"->"TEMP";case "DELIVERY_WINDOW"->"WINDOW";case "VEHICLE","DISTRICT","FUEL","FUEL_QUOTA","VEHICLE_AVAILABILITY"->"NONE";default->value.toUpperCase();};}
+ private String details(Map<String,String> values){try{return json.writeValueAsString(values);}catch(JsonProcessingException ex){throw new PlanningException(500,"Could not serialize planning audit");}}private String nvl(String v){return v==null?"":v;}
 }

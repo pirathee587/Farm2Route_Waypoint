@@ -18,8 +18,10 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(e -> d.put(e.getField(), e.getDefaultMessage()));
         return ResponseEntity.badRequest().body(new ApiError(java.time.Instant.now(),400,"Bad Request","Validation failed",d));
     }
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<ApiError> invalid(IllegalArgumentException ex){return ResponseEntity.badRequest().body(ApiError.of(400,"Bad Request",ex.getMessage()));}
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> generic(Exception ex) {
-        return ResponseEntity.status(500).body(ApiError.of(500,"Internal Server Error",ex.getMessage()==null?"Unexpected error":ex.getMessage()));
+        return ResponseEntity.status(500).body(ApiError.of(500,"Internal Server Error","Unexpected server failure"));
     }
 }

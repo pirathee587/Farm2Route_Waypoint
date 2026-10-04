@@ -4,9 +4,8 @@ import { fetchLiveTrackingData } from '@/features/delivery-tracking/liveTracking
 import { getDeferredOrdersSnapshot } from '@/features/planning-allocation/routePlanningApi';
 
 export async function fetchCurrentReportData(): Promise<ReportData> {
-  const [fleet, tracking] = await Promise.all([fetchFleetData(), fetchLiveTrackingData()]);
-  const deferred = getDeferredOrdersSnapshot();
-  const totalOrders = 56;
+  const [fleet, tracking, deferred] = await Promise.all([fetchFleetData(), fetchLiveTrackingData(), getDeferredOrdersSnapshot()]);
+  const totalOrders = deferred.length;
   const deferredOrders = deferred.length;
   const plannedOrders = totalOrders - deferredOrders;
   const plannedPercent = Math.round((plannedOrders / totalOrders) * 1000) / 10;

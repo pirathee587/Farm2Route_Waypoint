@@ -1,0 +1,1 @@
+ALTER TYPE public.allocation_status ADD VALUE IF NOT EXISTS 'RETURNED_TO_PLANNING';

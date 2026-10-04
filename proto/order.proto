@@ -28,6 +28,9 @@ service OrderService {
 
   // Get vehicle reference data by ID
   rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse);
+
+  // Planning-facing fleet query. Order Service team must implement this RPC.
+  rpc ListVehicles(ListVehiclesRequest) returns (ListVehiclesResponse);
 }
 
 // ── Place Order ────────────────────────────────
@@ -125,6 +128,15 @@ message GetVehicleResponse {
   Vehicle vehicle = 1;
 }
 
+message ListVehiclesRequest {
+  string depot = 1;
+  bool available_only = 2;
+}
+
+message ListVehiclesResponse {
+  repeated Vehicle vehicles = 1;
+}
+
 // ── Shared Entity Messages ─────────────────────
 message Order {
   string order_id = 1;
@@ -153,6 +165,8 @@ message Outlet {
   string parking_type = 5;
   double lat = 6;
   double lng = 7;
+  string window_open = 8;
+  string window_close = 9;
 }
 
 message Vehicle {
@@ -166,4 +180,10 @@ message Vehicle {
   string temp_capability = 6;
   string depot = 7;
   string brand = 8;
+  string driver_id = 9;
+  string driver_name = 10;
+  bool active = 11;
+  bool available = 12;
+  double weekly_fuel_quota_l = 13;
+  double weekly_fuel_used_l = 14;
 }

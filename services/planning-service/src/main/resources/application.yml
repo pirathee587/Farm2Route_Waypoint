@@ -4,9 +4,9 @@ spring:
 
   # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
   datasource:
-    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
-    username: ${SUPABASE_DB_USER}
-    password: ${SUPABASE_DB_PASSWORD}
+    url: ${DB_URL:jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require}
+    username: ${DB_USERNAME:${SUPABASE_DB_USER}}
+    password: ${DB_PASSWORD:${SUPABASE_DB_PASSWORD}}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: PlanningHikariPool
@@ -20,7 +20,7 @@ spring:
   # ── JPA ──────────────────────────────────────────────────────────────────
   jpa:
     hibernate:
-      ddl-auto: none          # Supabase manages schema via migrations
+      ddl-auto: validate      # Flyway owns schema; Hibernate only verifies mappings
     show-sql: false
     properties:
       hibernate:
@@ -28,6 +28,12 @@ spring:
         default_schema: public
         format_sql: true
     open-in-view: false
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
 
   # ── RabbitMQ ─────────────────────────────────────────────────────────────
   rabbitmq:
@@ -53,6 +59,9 @@ server:
 
 # ── Actuator ────────────────────────────────────────────────────────────
 management:
+  health:
+    rabbit:
+      enabled: ${RABBITMQ_HEALTH_ENABLED:false}
   endpoints:
     web:
       exposure:
@@ -63,12 +72,21 @@ management:
 
 # ── gRPC (Order Service connection) ──────────────────────────────────────
 grpc:
+  server:
+    port: ${PLANNING_GRPC_PORT:9090}
+  client:
+    order-service:
+      address: static://${ORDER_SERVICE_GRPC_HOST:order-service}:${ORDER_SERVICE_GRPC_PORT:9090}
+      negotiation-type: plaintext
   order-service:
     host: ${ORDER_SERVICE_GRPC_HOST:order-service}
     port: ${ORDER_SERVICE_GRPC_PORT:9090}
 
 # ── RabbitMQ Exchange / Queue names ──────────────────────────────────────
 waypoint:
+  planning:
+    master-data:
+      mode: ${PLANNING_MASTER_DATA_MODE:jdbc}
   rabbitmq:
     exchange: waypoint.events
     queues:

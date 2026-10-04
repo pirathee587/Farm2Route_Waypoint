@@ -85,11 +85,11 @@ export const TripValidationColumn: React.FC<TripValidationColumnProps> = ({ draf
             {validation.checks.map(check => (
               <div key={check.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                 <div style={{ marginTop: '2px' }}>
-                  {check.passed ? <Check size={14} color="#16A34A" strokeWidth={2.5} /> : <span style={{ color: '#DC2626', fontWeight: 700, fontSize: '12px' }}>!</span>}
+                  {check.status === 'PASSED' ? <Check size={14} color="#16A34A" strokeWidth={2.5} /> : <span style={{ color: check.status === 'NOT_EVALUATED' ? '#64748B' : '#DC2626', fontWeight: 700, fontSize: '12px' }}>{check.status === 'NOT_EVALUATED' ? '?' : '!'}</span>}
                 </div>
                 <div>
                   <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '2px' }}>{check.name}</div>
-                  <div style={{ fontSize: '11px', color: check.passed ? '#16A34A' : '#DC2626' }}>{check.message}</div>
+                  <div style={{ fontSize: '11px', color: check.status === 'PASSED' ? '#16A34A' : check.status === 'NOT_EVALUATED' ? '#64748B' : '#DC2626' }}>{check.message}</div>
                 </div>
               </div>
             ))}
