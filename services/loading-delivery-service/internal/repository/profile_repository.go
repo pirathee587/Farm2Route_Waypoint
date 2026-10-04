@@ -43,6 +43,23 @@ func (r *ProfileRepository) Heartbeat(ctx context.Context, driverID uuid.UUID, s
 	}
 	return err
 }
+
+func (r *ProfileRepository) Location(ctx context.Context, driverID uuid.UUID, request model.LocationUpdateRequest, recordedAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO public.driver_sessions(
+			driver_id, last_seen_at, latitude, longitude, accuracy_meters, heading, speed_meters_per_sec, updated_at
+		) VALUES($1,$2,$3,$4,$5,$6,$7,$2)
+		ON CONFLICT(driver_id) DO UPDATE SET
+			last_seen_at=EXCLUDED.last_seen_at,
+			latitude=EXCLUDED.latitude,
+			longitude=EXCLUDED.longitude,
+			accuracy_meters=EXCLUDED.accuracy_meters,
+			heading=EXCLUDED.heading,
+			speed_meters_per_sec=EXCLUDED.speed_meters_per_sec,
+			updated_at=EXCLUDED.updated_at
+	`, driverID, recordedAt, request.Latitude, request.Longitude, request.AccuracyMeters, request.Heading, request.SpeedMetersPerSec)
+	return err
+}
 func (r *ProfileRepository) History(ctx context.Context, driverID uuid.UUID, from, to time.Time, page, pageSize int) ([]model.HistoryTrip, int, error) {
 	var total int
 	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM public.trips WHERE driver_id=$1 AND delivery_date BETWEEN $2::date AND $3::date`, driverID, from.Format("2006-01-02"), to.Format("2006-01-02")).Scan(&total); err != nil {

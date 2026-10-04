@@ -35,6 +35,18 @@ type HeartbeatRequest struct {
 	ClientTime          time.Time `json:"client_time"`
 	PendingActionsCount int       `json:"pending_actions_count"`
 }
+
+type LocationUpdateRequest struct {
+	Latitude           float64 `json:"latitude"`
+	Longitude          float64 `json:"longitude"`
+	AccuracyMeters     float64 `json:"accuracy_meters"`
+	Heading            *float64 `json:"heading,omitempty"`
+	SpeedMetersPerSec  *float64 `json:"speed_meters_per_sec,omitempty"`
+}
+
+type LocationUpdateResponse struct {
+	RecordedAt time.Time `json:"recorded_at"`
+}
 type HeartbeatResponse struct {
 	ServerTime       time.Time `json:"server_time"`
 	ClockSkewSeconds int64     `json:"clock_skew_seconds"`

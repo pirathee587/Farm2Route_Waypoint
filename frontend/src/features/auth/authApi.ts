@@ -69,33 +69,10 @@ export const authApi = {
         user: data.user,
       });
     } catch {
-      // Fallback for standalone demo when backend server is offline
-      if (credentials.password === 'wrong' || credentials.password === 'error') {
-        return {
-          success: false,
-          errorMessage: 'Incorrect email or password',
-        };
-      }
-
-      const email = credentials.email.toLowerCase();
-      const fallbackRole: AuthUser['role'] = email.includes('dispatcher')
-        ? 'DISPATCHER'
-        : email.includes('driver')
-          ? 'DRIVER'
-          : email.includes('manager')
-            ? 'STORE_MANAGER'
-            : 'LOADER';
-
-      return persistSession({
-        success: true,
-        accessToken: 'mock-jwt-token-waypoint',
-        user: {
-          id: 'user-001',
-          email: credentials.email,
-          role: fallbackRole,
-          fullName: 'S. Perera',
-        },
-      });
+      return {
+        success: false,
+        errorMessage: 'Unable to connect to the authentication service',
+      };
     }
   },
 

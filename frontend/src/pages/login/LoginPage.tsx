@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
 import { authSession } from '@/features/auth/authSession';
@@ -11,7 +10,6 @@ export const LoginPage: React.FC = () => {
   const [screen, setScreen] = useState<AuthScreen>('login');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
   const [loggedInUser, setLoggedInUser] = useState<{ email: string; role: string } | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const handleResize = () => {

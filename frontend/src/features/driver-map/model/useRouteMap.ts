@@ -7,6 +7,7 @@ import {
 } from './types';
 import { calculateDistanceMeters, roundCoordinate } from '../lib/geo';
 import { authSession } from '@/features/auth/authSession';
+import { apiRequest } from '@/shared/api/apiClient';
 
 const ROUTE_CACHE_PREFIX = 'waypoint_route_cache_';
 const TODAY_CACHE_KEY = 'waypoint_driver_today_cache';
@@ -39,6 +40,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
   const lastFetchedLocationRef = useRef<DriverGeoLocation | null>(null);
   const driverLocationRef = useRef<DriverGeoLocation | null>(null);
   const hasRouteDataRef = useRef<boolean>(false);
+  const lastLocationSentAtRef = useRef<number>(0);
 
   // Ref tracking in-flight fetch and debounce
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -54,6 +56,26 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
       headers['Authorization'] = `Bearer ${session.accessToken}`;
     }
     return headers;
+  }, []);
+
+  const sendLocation = useCallback(async (location: DriverGeoLocation) => {
+    const now = Date.now();
+    if (now - lastLocationSentAtRef.current < 10000) return;
+    lastLocationSentAtRef.current = now;
+    try {
+      await apiRequest('/delivery/driver/location', {
+        method: 'POST',
+        body: JSON.stringify({
+          latitude: location.lat,
+          longitude: location.lng,
+          accuracy_meters: location.accuracy ?? 0,
+          heading: location.heading,
+          speed_meters_per_sec: location.speed,
+        }),
+      });
+    } catch {
+      // Route refresh remains available when a transient location update fails.
+    }
   }, []);
 
   // 1. Initial lookup: discover active trip if not provided
@@ -237,6 +259,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
 
         setDriverLocation(newLoc);
         driverLocationRef.current = newLoc;
+        void sendLocation(newLoc);
 
         // Check if driver moved > 50m from last fetched location
         if (lastFetchedLocationRef.current) {
@@ -273,7 +296,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [movementThresholdMeters, fetchRoute]);
+  }, [movementThresholdMeters, fetchRoute, sendLocation]);
 
   // 4. Polling Timer: 20s while page is visible, pause on document.hidden
   useEffect(() => {

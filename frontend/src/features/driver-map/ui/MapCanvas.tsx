@@ -377,10 +377,45 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
         (currentNextStopId && currentNextStopId !== lastFittedNextStopIdRef.current);
 
       if (shouldFit) {
-        fitDriverAndTarget(hasInitialFittedRef.current);
-        hasInitialFittedRef.current = true;
-        if (hasUsableDriverLocation) hasFittedDriverRef.current = true;
-        lastFittedNextStopIdRef.current = currentNextStopId;
+        const bounds = new mapboxgl.LngLatBounds();
+
+        // 1. Depot
+        if (routeData.depot && (routeData.depot.lat !== 0 || routeData.depot.lng !== 0)) {
+          bounds.extend([routeData.depot.lng, routeData.depot.lat]);
+        }
+
+        // 2. Next Stop
+        if (routeData.next_stop) {
+          const nextStopObj = routeData.stops.find(
+            (s) => s.stop_id === routeData.next_stop?.stop_id
+          );
+          if (nextStopObj) {
+            bounds.extend([nextStopObj.lng, nextStopObj.lat]);
+          }
+        }
+
+        // 3. Driver Location
+        if (hasUsableDriverLocation && driverLocation) {
+          bounds.extend([driverLocation.lng, driverLocation.lat]);
+        }
+
+        // 4. If geometry exists, extend with initial points
+        if (routeData.route_geometry?.coordinates?.length) {
+          routeData.route_geometry.coordinates.forEach((coord) => {
+            bounds.extend(coord as [number, number]);
+          });
+        }
+
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds, {
+            padding: { top: 180, bottom: 210, left: 52, right: 52 },
+            maxZoom: 14.5,
+            duration: hasInitialFittedRef.current ? 1200 : 0,
+          });
+          hasInitialFittedRef.current = true;
+          if (hasUsableDriverLocation) hasFittedDriverRef.current = true;
+          lastFittedNextStopIdRef.current = currentNextStopId;
+        }
       }
     }, [routeData, driverLocation]);
 

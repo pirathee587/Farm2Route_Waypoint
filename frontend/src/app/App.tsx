@@ -84,7 +84,6 @@ export const App: React.FC = () => {
     }
     return null;
   });
-
   const navigate = (next: DispatcherRoute, path: string, replace = false) => {
     if (replace) window.history.replaceState({}, '', path);
     else if (window.location.pathname !== path) window.history.pushState({}, '', path);
@@ -112,7 +111,6 @@ export const App: React.FC = () => {
     authSession.clear();
     window.location.assign('/login');
   };
-
   const handleGlobalNavigate = (target: string) => {
     if (target === 'route-planning') target = 'planning';
     if (target === 'shortfall') target = 'capacity-shortfall';

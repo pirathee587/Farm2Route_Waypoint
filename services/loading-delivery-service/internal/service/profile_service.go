@@ -12,6 +12,7 @@ import (
 type ProfileDataRepository interface {
 	GetProfile(context.Context, uuid.UUID) (model.DriverProfileRecord, error)
 	Heartbeat(context.Context, uuid.UUID, time.Time, int) error
+	Location(context.Context, uuid.UUID, model.LocationUpdateRequest, time.Time) error
 	History(context.Context, uuid.UUID, time.Time, time.Time, int, int) ([]model.HistoryTrip, int, error)
 }
 type ProfileService struct {
@@ -45,6 +46,20 @@ func (s *ProfileService) Profile(ctx context.Context, id uuid.UUID) (*model.Driv
 func (s *ProfileService) Heartbeat(ctx context.Context, id uuid.UUID, request model.HeartbeatRequest) (*model.HeartbeatResponse, error) {
 	if request.ClientTime.IsZero() {
 		return nil, model.ErrBadRequest("client_time is required")
+	}
+
+	func (s *ProfileService) Location(ctx context.Context, id uuid.UUID, request model.LocationUpdateRequest) (*model.LocationUpdateResponse, error) {
+		if request.Latitude < -90 || request.Latitude > 90 || request.Longitude < -180 || request.Longitude > 180 {
+			return nil, model.ErrBadRequest("latitude or longitude is out of range")
+		}
+		if request.AccuracyMeters < 0 || request.AccuracyMeters > 10000 {
+			return nil, model.ErrBadRequest("accuracy_meters must be between 0 and 10000")
+		}
+		recordedAt := s.now()
+		if err := s.repo.Location(ctx, id, request, recordedAt); err != nil {
+			return nil, err
+		}
+		return &model.LocationUpdateResponse{RecordedAt: recordedAt.In(s.location)}, nil
 	}
 	if request.PendingActionsCount < 0 {
 		return nil, model.ErrBadRequest("pending_actions_count must not be negative")

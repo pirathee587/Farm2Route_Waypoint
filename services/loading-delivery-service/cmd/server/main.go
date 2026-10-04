@@ -226,6 +226,7 @@ func main() {
 	driverMux.HandleFunc("GET /api/delivery/driver/trips/{tripId}/route/geometry", driverHandler.GetRouteGeometry)
 	driverMux.HandleFunc("GET /api/delivery/driver/profile", profileHandler.GetProfile)
 	driverMux.HandleFunc("POST /api/delivery/driver/heartbeat", profileHandler.Heartbeat)
+	driverMux.HandleFunc("POST /api/delivery/driver/location", profileHandler.Location)
 	driverMux.HandleFunc("GET /api/delivery/driver/history", profileHandler.History)
 	driverMux.HandleFunc("GET /api/delivery/driver/notifications", notificationHandler.Today)
 	driverMux.HandleFunc("POST /api/delivery/driver/notifications/{id}/review", notificationHandler.Review)
