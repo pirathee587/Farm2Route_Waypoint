@@ -5,6 +5,7 @@ import type {
   TripValidationResult, UpdateNextPlannedDateRequest, VehicleCandidate,
 } from '@/entities/planning/planningTypes';
 import { fetchFleetData } from '@/features/fleet/fleetApi';
+import { apiRequest } from '@/shared/api/apiClient';
 
 type CheckStatus = 'PASSED' | 'FAILED' | 'NOT_EVALUATED';
 interface ApiErrorBody { message?: string; details?: string[] | Record<string, string>; }
@@ -13,25 +14,23 @@ interface ApiCheck { code: string; status: CheckStatus; message: string; blockin
 interface ApiValidation { feasible: boolean; totalWeightKg: number; totalVolumeM3: number; checks: ApiCheck[]; blockingReasons: string[]; }
 interface ApiTrip { tripId: string; tripCode?: string; status: string; planningDate: string; homeDepot: string; vehicleId?: string; driverId?: string; totalWeight?: number; totalVolume?: number; orders: Array<Pick<ApiOrder,'orderId'|'outletId'|'outletName'|'weightKg'|'volumeM3'> & { temperatureRequirement?: string }>; stops: Array<{ sequence: number; orderId: string; outletId: string; outletName: string; plannedArrival?: string; windowOpen?: string; windowClose?: string; weightKg: number; volumeM3: number }>; validation?: ApiValidation; }
 interface ApiDashboard { totalOrders:number; plannedOrders:number; unplannedOrders:number; deferredOrders:number; availableVehicles:number; totalVehicles:number; availableReefers:number; totalReefers:number; }
-interface ApiDeferral { deferralId:string; orderId:string; deliveryDate:string; reason:string; constraintType?:string; retryDate?:string; notified:boolean; createdAt:string; }
+interface ApiDeferral { deferralId:string; orderId:string; deliveryDate:string; reason:string; constraintType?:string; retryDate?:string; notified:boolean; createdAt:string; outletName?:string; district?:string; depot?:string; brand?:string; tempRequirement?:string; weightKg?:number; volumeM3?:number; windowOpen?:string; windowClose?:string; }
 
 export class PlanningApiError extends Error {
   constructor(public status: number, message: string, public details?: ApiErrorBody['details']) { super(message); }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
   try {
-    response = await fetch(`/api/planning${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  } catch { throw new PlanningApiError(0, 'Planning Service is unreachable. Check your connection and try again.'); }
-  if (!response.ok) {
-    let body: ApiErrorBody = {};
-    try { body = await response.json() as ApiErrorBody; } catch { /* non-JSON gateway error */ }
-    const defaults: Record<number,string> = {400:'The request is invalid.',404:'The requested planning record was not found.',409:'The planning record changed or conflicts with another action.',422:'The plan violates an operational constraint.',500:'Planning Service encountered an error.'};
-    throw new PlanningApiError(response.status, body.message || defaults[response.status] || `Planning request failed (${response.status}).`, body.details);
+    return await apiRequest<T>(`/planning${path}`, init);
+  } catch (error) {
+    if (error instanceof PlanningApiError) throw error;
+    const status = typeof error === 'object' && error !== null && 'status' in error
+      ? Number((error as { status?: number }).status)
+      : 0;
+    const message = error instanceof Error ? error.message : 'Planning Service is unreachable. Check your connection and try again.';
+    throw new PlanningApiError(status, message);
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
 }
 
 const today = () => new Date().toISOString().slice(0,10);
@@ -41,6 +40,7 @@ const brand = (v?: string) => /style/i.test(v || '') ? 'Style' as const : /tech/
 function toOrder(o: ApiOrder): QueueOrder { const constraint: QueueOrder['constraint'] = /van/i.test(o.parkingType || '') ? 'Van Only' : requirement(o.tempRequirement)==='Ambient' ? 'Valid' : 'Reefer Required'; return { id:o.orderId, receivedAt:'', isNew:false, outletName:o.outletName, routeArea:`${o.depot || 'Peliyagoda'} - ${o.district || ''}`, brand:brand(o.brand), deliveryWindow:o.windowOpen && o.windowClose ? `${o.windowOpen} - ${o.windowClose}` : 'Not specified', timeSensitive:false, temperature:requirement(o.tempRequirement), weightKg:o.weightKg, volumeM3:o.volumeM3, status:o.orderStatus === 'DEFERRED' ? 'Deferred' : o.orderStatus === 'PLANNED' ? 'Planned' : 'Unplanned', constraint }; }
 
 export async function fetchPlanningOrders(date = today()): Promise<QueueOrder[]> { return (await request<ApiOrder[]>(`/orders/unplanned?date=${date}`)).map(toOrder); }
+export async function fetchPlanningOrder(id: string): Promise<QueueOrder> { return toOrder(await request<ApiOrder>(`/orders/${encodeURIComponent(id)}`)); }
 export async function fetchPlanningSummary(date = today()): Promise<PlanningSummary> { const d=await request<ApiDashboard>(`/dashboard?date=${date}`); return {unplanned:d.unplannedOrders,planned:d.plannedOrders,availableVehicles:d.availableVehicles,totalVehicles:d.totalVehicles,reeferAvailable:d.availableReefers,totalReefer:d.totalReefers,deferred:d.deferredOrders}; }
 export async function fetchAvailableVehicles(): Promise<VehicleCandidate[]> { const f=await fetchFleetData(); return f.vehicles.map(v=>({id:v.id,type:v.type==='Dry Box'?'Dry-box Truck':v.type==='Van'?'Small Van':'Reefer',name:`${v.id} - ${v.type}`,weightCapacityKg:v.weightCapacityKg,volumeCapacityM3:v.volumeCapacityM3,driverName:v.driverName,status:v.status,currentDepot:v.depot,isRefrigerated:v.isRefrigerated,tripsToday:v.tripsToday,fuelStatus:v.fuelPercent>=30?'Within quota':'Exceeded'})); }
 export function getVehicleEligibilityReason(): string | null { return null; }
@@ -63,7 +63,7 @@ export async function fetchPlannedTrip(id:string):Promise<DraftTrip>{return trip
 export async function fetchCapacityShortfallData():Promise<CapacityShortfallData>{const s=await request<{totalOrders:number;serviceable:number;requiresDecision:number;affectedOrders:Array<{orderId:string;outletName:string;reason:string;constraintType?:string;retryDate?:string}>}>(`/shortfalls?date=${today()}`);return {constraintType:'ROUTE LIMIT',title:'Capacity Shortfall Detected',subtitle:'Available fleet capacity cannot serve all current delivery demand.',warningTitle:'Planning decisions are required.',warningSubtitle:'Review the affected orders below.',whyExplanation:'These orders could not be allocated by the Planning Service.',summary:{ordersRequiringService:s.totalOrders,canBeServed:s.serviceable,requireDecision:s.requiresDecision,reeferCapacity:0,reeferAvailable:0},affectedOrders:s.affectedOrders.map(a=>({id:a.orderId,outletName:a.outletName,outletShort:a.outletName,depot:'',district:'',brand:'Fresh',requirement:'Ambient',weightKg:0,volumeM3:0,deliveryWindow:'Not specified',timeSensitive:false,risk:'Capacity',decisionState:'Unresolved',recommendation:{action:'DEFER',reason:a.reason}}))};}
 export async function recordOrderDeferral(r:DeferOrderRequest){const x=await request<ApiDeferral>(`/orders/${r.orderId}/defer`,{method:'POST',body:JSON.stringify({reason:r.reason,reasonDescription:r.reason,constraintType:'CAPACITY',retryDate:r.nextPlannedDate,nextPlannedDate:r.nextPlannedDate,operationalNote:r.operationalNote})});return {success:true,deferralRecord:{reason:x.reason,nextPlannedDate:x.retryDate||r.nextPlannedDate,operationalNote:r.operationalNote,recordedAt:x.createdAt}};}
 export async function recordOrderKeepInPlan(id:string){await request(`/orders/${id}/replan`,{method:'POST'});return {success:true};}
-function deferred(d:ApiDeferral):DeferredOrder{return {id:d.orderId,outletName:d.orderId,outletShort:d.orderId,depot:'',depotRegion:'',brand:'Fresh',deferralReasonCategory:/window/i.test(d.constraintType||d.reason)?'Window':/vehicle/i.test(d.constraintType||d.reason)?'Vehicle':/capacity/i.test(d.constraintType||d.reason)?'Capacity':'Other',deferralReasonLabel:d.reason,deferralReasonFull:d.reason,deferralNote:d.reason,deferredAt:new Date(d.createdAt).toLocaleString(),nextPlannedDate:d.retryDate||d.deliveryDate,nextPlannedDateLabel:d.retryDate||d.deliveryDate,queueStatus:d.retryDate?'Scheduled':'Pending',requirement:'Ambient',weightKg:0,volumeM3:0,deliveryWindow:'Not specified',history:[{event:'Deferred by Dispatcher',timestamp:new Date(d.createdAt).toLocaleString()}]};}
+function deferred(d:ApiDeferral):DeferredOrder{return {id:d.orderId,outletName:d.outletName||d.orderId,outletShort:d.outletName||d.orderId,depot:d.depot||'',depotRegion:d.district||'',brand:brand(d.brand),deferralReasonCategory:/window/i.test(d.constraintType||d.reason)?'Window':/vehicle/i.test(d.constraintType||d.reason)?'Vehicle':/capacity/i.test(d.constraintType||d.reason)?'Capacity':'Other',deferralReasonLabel:d.reason,deferralReasonFull:d.reason,deferralNote:d.reason,deferredAt:new Date(d.createdAt).toLocaleString(),nextPlannedDate:d.retryDate||d.deliveryDate,nextPlannedDateLabel:d.retryDate||d.deliveryDate,queueStatus:d.retryDate?'Scheduled':'Pending',requirement:requirement(d.tempRequirement),weightKg:d.weightKg||0,volumeM3:d.volumeM3||0,deliveryWindow:d.windowOpen&&d.windowClose?`${d.windowOpen} - ${d.windowClose}`:'Not specified',history:[{event:'Deferred by Dispatcher',timestamp:new Date(d.createdAt).toLocaleString()}]};}
 export async function fetchDeferredOrders(){const rows=(await request<ApiDeferral[]>(`/deferred?date=${today()}`)).map(deferred);const summary:DeferredOrdersSummary={totalDeferred:rows.length,capacity:rows.filter(x=>x.deferralReasonCategory==='Capacity').length,window:rows.filter(x=>x.deferralReasonCategory==='Window').length,vehicle:rows.filter(x=>x.deferralReasonCategory==='Vehicle').length,other:rows.filter(x=>x.deferralReasonCategory==='Other').length};return {summary,orders:rows};}
 export async function getDeferredOrdersSnapshot():Promise<DeferredOrder[]>{return (await fetchDeferredOrders()).orders;}
 export async function updateNextPlannedDate(r:UpdateNextPlannedDateRequest){await request(`/deferred/${r.orderId}/next-date`,{method:'PATCH',body:JSON.stringify({nextPlannedDate:r.newDate,reasonForChange:r.reasonForChange})});const refreshed=await fetchDeferredOrders();const updated=refreshed.orders.find(order=>order.id===r.orderId);if(!updated)throw new PlanningApiError(404,'Updated deferred order was not returned by the Planning Service.');return updated;}

@@ -11,7 +11,7 @@ export class ApiError extends Error {
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const session = authSession.get();
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+  if (!(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   if (session?.accessToken) {
     headers.set('Authorization', `Bearer ${session.accessToken}`);
   }
@@ -26,6 +26,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     const body = await response.json().catch(() => ({}));
     throw new ApiError(response.status, body.message || 'Request failed');
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 

@@ -7,6 +7,7 @@ import { ChangeNextDateModal } from './deferred/ChangeNextDateModal';
 import { ReturnToPlanningModal } from './deferred/ReturnToPlanningModal';
 import {
   fetchDeferredOrders,
+  fetchPlanningOrder,
   updateNextPlannedDate,
   returnOrderToPlanning,
 } from '@/features/planning-allocation/routePlanningApi';
@@ -15,15 +16,17 @@ import type {
   DeferredOrdersSummary,
   DeferralReasonCategory,
 } from '@/entities/planning/planningTypes';
+import type { QueueOrder } from '@/entities/order/orderTypes';
 import { SlidersHorizontal } from 'lucide-react';
 
 interface Props {
   onNavigateGlobal?: (page: string) => void;
+  onPlanOrders?: (orders: QueueOrder[]) => void;
 }
 
 type ActiveFilter = 'All' | DeferralReasonCategory;
 
-export const DeferredOrdersPage: React.FC<Props> = ({ onNavigateGlobal }) => {
+export const DeferredOrdersPage: React.FC<Props> = ({ onNavigateGlobal, onPlanOrders }) => {
   const [orders, setOrders] = useState<DeferredOrder[]>([]);
   const [summary, setSummary] = useState<DeferredOrdersSummary>({
     totalDeferred: 0, capacity: 0, window: 0, vehicle: 0, other: 0,
@@ -130,8 +133,9 @@ export const DeferredOrdersPage: React.FC<Props> = ({ onNavigateGlobal }) => {
       const res = await returnOrderToPlanning({ orderId: selectedOrder.id });
       if (res.success) {
         setReturnModalOpen(false);
-        // Navigate to Route Planning — the order is now UNPLANNED
-        if (onNavigateGlobal) onNavigateGlobal('planning');
+        const order = await fetchPlanningOrder(selectedOrder.id);
+        if (onPlanOrders) onPlanOrders([order]);
+        else if (onNavigateGlobal) onNavigateGlobal('planning');
       }
     } catch (err: unknown) {
       setReturnError((err as Error).message || 'Failed to return order. Please try again.');

@@ -190,6 +190,7 @@ func main() {
 	loaderMux.HandleFunc("GET /api/loading/trips/{tripId}/shortfall-context", loaderHandler.GetShortfallContext)
 	loaderMux.HandleFunc("POST /api/loading/trips/{tripId}/shortfalls", loaderHandler.CreateShortfall)
 	loaderMux.HandleFunc("GET /api/loading/trips/{tripId}/shortfalls", loaderHandler.GetShortfalls)
+	loaderMux.HandleFunc("POST /api/loading/shortfalls/{issueId}/resolve", loaderHandler.ResolveShortfall)
 	loaderMux.HandleFunc("GET /api/loading/trips/{tripId}", loaderHandler.GetTripDetails)
 	loaderMux.HandleFunc("PUT /api/loading/trips/{tripId}/route-order", loaderHandler.UpdateRouteOrder)
 	loaderMux.HandleFunc("GET /api/loading/trips", loaderHandler.GetTodayLoads)

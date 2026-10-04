@@ -1,173 +1,77 @@
 import type { OrderDetails, OrdersQueueData, QueueOrder } from '@/entities/order/orderTypes';
+import { apiRequest } from '@/shared/api/apiClient';
 
-export const mockOrdersData: QueueOrder[] = [
-  {
-    id: 'ORD-0925-014',
-    receivedAt: 'Received 5 min ago',
-    isNew: true,
-    outletName: 'Waypoint Fresh — Colombo 07',
-    routeArea: 'Peliyagoda - Colombo',
-    brand: 'Fresh',
-    deliveryWindow: '05:30 - 07:30',
-    timeSensitive: false,
-    temperature: 'Chilled',
-    weightKg: 820,
-    volumeM3: 7.8,
-    status: 'Unplanned',
-    constraint: 'Reefer Required',
-  },
-  {
-    id: 'ORD-0925-018',
-    receivedAt: 'Received 12 min ago',
-    isNew: true,
-    outletName: 'Waypoint Style — Gampaha',
-    routeArea: 'Peliyagoda - Gampaha',
-    brand: 'Style',
-    deliveryWindow: '08:00 - 12:00',
-    timeSensitive: false,
-    temperature: 'Ambient',
-    weightKg: 540,
-    volumeM3: 5.2,
-    status: 'Unplanned',
-    constraint: 'Valid',
-  },
-  {
-    id: 'ORD-0925-027',
-    receivedAt: '',
-    isNew: false,
-    outletName: 'Waypoint Fresh — Nugegoda',
-    routeArea: 'Peliyagoda - Colombo',
-    brand: 'Fresh',
-    deliveryWindow: 'Before 08:00',
-    timeSensitive: true,
-    temperature: 'Chilled',
-    weightKg: 600,
-    volumeM3: 6.4,
-    status: 'Unplanned',
-    constraint: 'Tight Window',
-  },
-  {
-    id: 'ORD-0925-042',
-    receivedAt: '',
-    isNew: false,
-    outletName: 'Waypoint Style — Wattala',
-    routeArea: 'Peliyagoda - Gampaha',
-    brand: 'Style',
-    deliveryWindow: '11:00 - 14:00',
-    timeSensitive: false,
-    temperature: 'Ambient',
-    weightKg: 430,
-    volumeM3: 4.7,
-    status: 'Unplanned',
-    constraint: 'Van Only',
-  },
-  {
-    id: 'ORD-0925-031',
-    receivedAt: '',
-    isNew: false,
-    outletName: 'Waypoint Tech — Kandy',
-    routeArea: 'Kandy - Kandy',
-    brand: 'Tech',
-    deliveryWindow: '10:00 - 14:00',
-    timeSensitive: false,
-    temperature: 'Ambient',
-    weightKg: 780,
-    volumeM3: 8.1,
-    status: 'Planned',
-    constraint: 'Valid',
-  },
-  {
-    id: 'ORD-0925-036',
-    receivedAt: '',
-    isNew: false,
-    outletName: 'Waypoint Fresh — Gampaha',
-    routeArea: 'Peliyagoda - Gampaha',
-    brand: 'Fresh',
-    deliveryWindow: 'Before 08:00',
-    timeSensitive: true,
-    temperature: 'Chilled',
-    weightKg: 610,
-    volumeM3: 5.9,
-    status: 'Deferred',
-    constraint: 'Reefer Capacity',
-  },
-];
-
-// Shared in-memory development store. All Dispatcher planning screens read and
-// update this store so status transitions remain coherent until APIs exist.
-const persistedOrders = sessionStorage.getItem('waypoint:orders');
-let developmentOrders: QueueOrder[] = persistedOrders ? JSON.parse(persistedOrders) as QueueOrder[] : mockOrdersData.map(order => ({ ...order }));
-
-function persistDevelopmentOrders(): void {
-  sessionStorage.setItem('waypoint:orders', JSON.stringify(developmentOrders));
+interface ApiOrderSummary {
+  id: string;
+  brand: string;
+  order_type: string | null;
+  requested_delivery_date: string;
+  status: string;
+  item_count: number;
+  summary: string;
+  created_at: string;
 }
 
-export function getDevelopmentOrders(): QueueOrder[] {
-  return developmentOrders.map(order => ({ ...order }));
+interface ApiPagedOrders {
+  items: ApiOrderSummary[];
+  total_elements: number;
 }
 
-export function updateDevelopmentOrderStatus(orderId: string, status: QueueOrder['status']): QueueOrder | null {
-  const existing = developmentOrders.find(order => order.id === orderId);
-  if (!existing) return null;
-  developmentOrders = developmentOrders.map(order => order.id === orderId ? { ...order, status } : order);
-  persistDevelopmentOrders();
-  return { ...existing, status };
-}
-
-export function upsertDevelopmentOrder(order: QueueOrder): void {
-  const exists = developmentOrders.some(item => item.id === order.id);
-  developmentOrders = exists
-    ? developmentOrders.map(item => item.id === order.id ? { ...item, ...order } : item)
-    : [...developmentOrders, { ...order }];
-  persistDevelopmentOrders();
-}
-
-export const mockOrdersQueueSummary = {
-  totalOrders: 56,
-  fresh: 22,
-  style: 18,
-  tech: 16,
-  unplanned: 12,
-  deferred: 8,
-};
+const toQueueOrder = (order: ApiOrderSummary): QueueOrder => ({
+  id: order.id,
+  receivedAt: order.created_at ? `Received ${new Date(order.created_at).toLocaleString()}` : '',
+  isNew: false,
+  outletName: `Order ${order.id.slice(0, 8)}`,
+  routeArea: 'Not assigned',
+  brand: /style/i.test(order.brand) ? 'Style' : /tech/i.test(order.brand) ? 'Tech' : 'Fresh',
+  deliveryWindow: 'Not specified',
+  timeSensitive: false,
+  temperature: /chill|cold/i.test(order.order_type || '') ? 'Chilled' : 'Ambient',
+  weightKg: 0,
+  volumeM3: 0,
+  status: /defer/i.test(order.status) ? 'Deferred' : /alloc|plan/i.test(order.status) ? 'Planned' : 'Unplanned',
+  constraint: 'Valid',
+});
 
 export async function fetchOrdersQueueData(): Promise<OrdersQueueData> {
-  try {
-    const response = await fetch('/api/orders/queue', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!response.ok) {
-      console.warn('[OrdersAPI] Backend unavailable, using mock data.');
-      return { summary: mockOrdersQueueSummary, orders: getDevelopmentOrders() };
-    }
-
-    const apiData = await response.json();
-    return apiData;
-  } catch {
-    console.warn('[OrdersAPI] Fetch failed, using mock data.');
-    return { summary: mockOrdersQueueSummary, orders: getDevelopmentOrders() };
-  }
+  const page = await apiRequest<ApiPagedOrders>('/orders?page=0&size=100');
+  const orders = page.items.map(toQueueOrder);
+  return {
+    orders,
+    summary: {
+      totalOrders: page.total_elements,
+      fresh: orders.filter(order => order.brand === 'Fresh').length,
+      style: orders.filter(order => order.brand === 'Style').length,
+      tech: orders.filter(order => order.brand === 'Tech').length,
+      unplanned: orders.filter(order => order.status === 'Unplanned').length,
+      deferred: orders.filter(order => order.status === 'Deferred').length,
+    },
+  };
 }
 
 export async function fetchOrderDetails(orderId: string): Promise<OrderDetails | null> {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  const baseOrder = developmentOrders.find(o => o.id === orderId);
-  if (!baseOrder) return null;
-  
+  const response = await apiRequest<{
+    id: string;
+    brand: string;
+    order_type: string | null;
+    requested_delivery_date: string;
+    status: string;
+    created_at: string;
+    outlet_id: string;
+    items: Array<{ id: string; item_name: string; quantity: number; unit: string }>;
+  }>(`/orders/${encodeURIComponent(orderId)}`);
+  const baseOrder = toQueueOrder({ ...response, item_count: response.items.length, summary: '' });
   return {
     ...baseOrder,
-    depot: 'Peliyagoda',
-    district: 'Colombo',
-    accessRestriction: 'Standard truck access',
-    items: [
-      { name: 'Fresh Milk 1L', temperature: 'Chilled', qty: 120, weightKg: 410, volumeM3: 3.4 },
-      { name: 'Yoghurt Cartons', temperature: 'Chilled', qty: 180, weightKg: 250, volumeM3: 2.2 },
-      { name: 'Cheese Packs', temperature: 'Chilled', qty: 125, weightKg: 160, volumeM3: 2.2 },
-    ]
+    depot: 'Not assigned',
+    district: 'Not assigned',
+    accessRestriction: 'Not specified',
+    items: response.items.map(item => ({
+      name: item.item_name,
+      temperature: baseOrder.temperature,
+      qty: item.quantity,
+      weightKg: 0,
+      volumeM3: 0,
+    })),
   };
 }

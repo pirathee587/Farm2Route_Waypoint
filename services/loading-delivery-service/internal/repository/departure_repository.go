@@ -103,9 +103,9 @@ func (r *DepartureRepository) GetDepartureBlockerNames(ctx context.Context, trip
 	rows.Close()
 
 	unnotified := []string{}
-	rows, err = r.pool.Query(ctx, `SELECT COALESCE(li.name, f.ref, 'Shortfall') FROM public.issue_flags f LEFT JOIN public.load_items li ON li.item_id = f.item_id WHERE f.trip_id = $1 AND f.dispatcher_notified_at IS NULL ORDER BY f.created_at`, tripID)
+	rows, err = r.pool.Query(ctx, `SELECT COALESCE(li.name, f.ref, 'Shortfall') FROM public.issue_flags f LEFT JOIN public.load_items li ON li.item_id = f.item_id WHERE f.trip_id = $1 AND f.resolved = FALSE ORDER BY f.created_at`, tripID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("departure: unnotified shortfalls: %w", err)
+		return nil, nil, nil, fmt.Errorf("departure: unresolved shortfalls: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {

@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { DashboardData } from '@/entities/dashboard/dashboardTypes';
+import { apiRequest } from '@/shared/api/apiClient';
 
 // ── Mock / Fallback Data ────────────────────────────────────
 
@@ -143,19 +144,9 @@ interface DashboardApiResponse {
 // ── API Fetch ────────────────────────────────────────────────
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-    const response = await fetch('/api/planning/dashboard', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+    const apiData = await apiRequest<DashboardApiResponse>('/planning/dashboard', {
       signal: AbortSignal.timeout(5000),
     });
-
-    if (!response.ok) {
-      let message = `Unable to load dashboard (${response.status}).`;
-      try { message = ((await response.json()) as {message?:string}).message || message; } catch { /* gateway response */ }
-      throw new Error(message);
-    }
-
-    const apiData: DashboardApiResponse = await response.json();
 
     return {
       source: 'REAL_API',
