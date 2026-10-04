@@ -1641,7 +1641,7 @@ func (r *LoaderRepository) CreateShortfall(ctx context.Context, p ShortfallParam
 func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.UUID) ([]model.ShortfallDetailDTO, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT
-			issue_id, trip_id, stop_id, item_id, ref,
+			issue_id, trip_id, order_id, stop_id, item_id, ref,
 			COALESCE(issue_type, 'SHORTAGE'),
 			COALESCE(qty_affected, 0),
 			COALESCE(reason, 'SHORT_SHIPPED'),
@@ -1658,6 +1658,21 @@ func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.
 	if err != nil {
 		return nil, fmt.Errorf("failed to query issue flags: %w", err)
 	}
+
+	func (r *LoaderRepository) ResolveShortfall(ctx context.Context, issueID uuid.UUID, resolvedBy uuid.UUID, notes string) error {
+		command, err := r.pool.Exec(ctx, `
+			UPDATE public.issue_flags
+			SET resolved = TRUE, resolved_by = $2, resolved_at = NOW(), resolution_notes = $3
+			WHERE issue_id = $1 AND resolved = FALSE
+		`, issueID, resolvedBy, notes)
+		if err != nil {
+			return fmt.Errorf("failed to resolve shortfall: %w", err)
+		}
+		if command.RowsAffected() == 0 {
+			return model.ErrNotFound("Shortfall not found or already resolved")
+		}
+		return nil
+	}
 	defer rows.Close()
 
 	var flags []model.ShortfallDetailDTO
@@ -1665,6 +1680,7 @@ func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.
 		var (
 			issueID    uuid.UUID
 			trID       uuid.UUID
+			orderID    *uuid.UUID
 			stID       *uuid.UUID
 			itID       *uuid.UUID
 			ref        string
@@ -1679,13 +1695,17 @@ func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.
 			flaggedBy  uuid.UUID
 		)
 		err := rows.Scan(
-			&issueID, &trID, &stID, &itID, &ref, &issueType, &qty,
+			&issueID, &trID, &orderID, &stID, &itID, &ref, &issueType, &qty,
 			&reason, &desc, &evidence, &deltaKg, &notifiedAt, &resolved, &flaggedBy,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan issue flag row: %w", err)
 		}
-		var stIDStr, itIDStr *string
+		var orderIDStr, stIDStr, itIDStr *string
+		if orderID != nil {
+			s := orderID.String()
+			orderIDStr = &s
+		}
 		if stID != nil {
 			s := stID.String()
 			stIDStr = &s
@@ -1697,6 +1717,7 @@ func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.
 		flags = append(flags, model.ShortfallDetailDTO{
 			IssueID:              issueID.String(),
 			TripID:               trID.String(),
+			OrderID:             orderIDStr,
 			StopID:               stIDStr,
 			ItemID:               itIDStr,
 			Ref:                  ref,

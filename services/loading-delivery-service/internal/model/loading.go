@@ -561,6 +561,7 @@ type CreateShortfallResponse struct {
 type ShortfallDetailDTO struct {
 	IssueID              string    `json:"issueId"`
 	TripID               string    `json:"tripId"`
+	OrderID              *string   `json:"orderId,omitempty"`
 	StopID               *string   `json:"stopId,omitempty"`
 	ItemID               *string   `json:"itemId,omitempty"`
 	Ref                  string    `json:"ref"`
@@ -573,6 +574,8 @@ type ShortfallDetailDTO struct {
 	DispatcherNotifiedAt time.Time `json:"dispatcherNotifiedAt"`
 	Resolved             bool      `json:"resolved"`
 	FlaggedBy            string    `json:"flaggedBy"`
+	ResolvedAt           *time.Time `json:"resolvedAt,omitempty"`
+	ResolutionNotes      *string   `json:"resolutionNotes,omitempty"`
 }
 
 // ── P7: Departure DTOs ──────────────────────────────────────────────────────

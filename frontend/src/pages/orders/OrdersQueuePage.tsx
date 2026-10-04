@@ -39,6 +39,7 @@ interface OrdersQueuePageProps {
 export const OrdersQueuePage: React.FC<OrdersQueuePageProps> = ({ onNavigateGlobal, onViewOrderDetails, onPlanOrders }) => {
   const [data, setData] = useState<OrdersQueueData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
@@ -52,10 +53,11 @@ export const OrdersQueuePage: React.FC<OrdersQueuePageProps> = ({ onNavigateGlob
   useEffect(() => {
     let active = true;
     fetchOrdersQueueData().then(res => {
-      if (active) {
-        setData(res);
-        setLoading(false);
-      }
+      if (active) setData(res);
+    }).catch(error => {
+      if (active) setLoadError(error instanceof Error ? error.message : 'Unable to load orders.');
+    }).finally(() => {
+      if (active) setLoading(false);
     });
     return () => { active = false; };
   }, []);
@@ -98,7 +100,7 @@ export const OrdersQueuePage: React.FC<OrdersQueuePageProps> = ({ onNavigateGlob
     return (
       <DispatcherLayout activePage={activePage} onNavigate={handleNavigate}>
         <div style={{ padding: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b', fontSize: '14px' }}>
-          Loading orders...
+          {loading ? 'Loading orders...' : loadError || 'No orders are available.'}
         </div>
       </DispatcherLayout>
     );

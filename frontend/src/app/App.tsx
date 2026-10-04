@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from '@/pages/login/LoginPage';
-import { LoadingPortalPage } from '@/pages/loading/LoadingPortalPage';
+import { authSession } from '@/features/auth/authSession';
 import { StoreManagerLayout } from '@/shared/layouts/StoreManagerLayout';
 import { StoreManagerRouteGuard } from '@/shared/routes/StoreManagerRouteGuard';
 import { DashboardPage } from '@/pages/store-manager/DashboardPage';
@@ -17,6 +17,7 @@ import { OrdersQueuePage } from '@/pages/orders/OrdersQueuePage';
 import { OrderDetailsPage } from '@/pages/orders/OrderDetailsPage';
 import { RoutePlanningPage } from '@/pages/planning/RoutePlanningPage';
 import { PlannedTripDetailPage } from '@/pages/planning/PlannedTripDetailPage';
+import { LoadingShortfallReviewPage } from '@/pages/planning/LoadingShortfallReviewPage';
 import { CapacityShortfallPage } from '@/pages/planning/CapacityShortfallPage';
 import { DeferredOrdersPage } from '@/pages/planning/DeferredOrdersPage';
 import { LiveTrackingPage } from '@/pages/tracking/LiveTrackingPage';
@@ -27,6 +28,7 @@ import { ReportsPage } from '@/pages/reports/ReportsPage';
 import type { QueueOrder } from '@/entities/order/orderTypes';
 
 type DispatcherRoute = 'dashboard' | 'orders' | 'order-details' | 'planning' | 'planned-trip' |
+  'loading-shortfall' |
   'capacity-shortfall' | 'deferred-orders' | 'live-tracking' | 'live-trip-detail' |
   'live-trip-map' | 'fleet' | 'reports';
 
@@ -35,6 +37,7 @@ function routeFromPath(pathname: string): { route: DispatcherRoute; id?: string 
   if (p[0] !== 'dispatcher') return { route: 'dashboard' };
   if (p[1] === 'orders' && p[2]) return { route: 'order-details', id: decodeURIComponent(p[2]) };
   if (p[1] === 'orders') return { route: 'orders' };
+  if (p[1] === 'planning' && p[2] === 'trips' && p[3] && p[4] === 'loading-shortfall') return { route: 'loading-shortfall', id: decodeURIComponent(p[3]) };
   if (p[1] === 'planning' && p[2] === 'trips' && p[3]) return { route: 'planned-trip', id: decodeURIComponent(p[3]) };
   if (p[1] === 'planning' && p[2] === 'shortfall') return { route: 'capacity-shortfall' };
   if (p[1] === 'planning') return { route: 'planning' };
@@ -55,23 +58,14 @@ const dispatcherPaths: Partial<Record<DispatcherRoute, string>> = {
 
 export const App: React.FC = () => {
   const isDispatcherPath = window.location.pathname.startsWith('/dispatcher');
+  const session = authSession.get();
   const initial = routeFromPath(window.location.pathname);
   const [dispatcherRoute, setDispatcherRoute] = useState<DispatcherRoute>(initial.route);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(initial.route === 'order-details' ? initial.id ?? null : null);
   const [plannedTripId, setPlannedTripId] = useState<string | null>(initial.route === 'planned-trip' ? initial.id ?? null : null);
+  const [shortfallTripId, setShortfallTripId] = useState<string | null>(initial.route === 'loading-shortfall' ? initial.id ?? null : null);
   const [planningSelectedOrders, setPlanningSelectedOrders] = useState<QueueOrder[]>([]);
   const [selectedTrackingTripId, setSelectedTrackingTripId] = useState(initial.route === 'live-trip-detail' || initial.route === 'live-trip-map' ? initial.id ?? '' : 'TRIP-0925-014');
-  const [currentUser, setCurrentUser] = useState<{ email: string; role?: string } | null>(() => {
-    const storedUser = localStorage.getItem('waypoint_loader_session');
-    if (storedUser) {
-      try { return JSON.parse(storedUser); } catch { return null; }
-    }
-    if (window.location.hash === '#loading' || window.location.hash === '#portal') {
-      return { email: 'kumar.s@waypoint.com', role: 'LOADER' };
-    }
-    return null;
-  });
-
   const navigate = (next: DispatcherRoute, path: string, replace = false) => {
     if (replace) window.history.replaceState({}, '', path);
     else if (window.location.pathname !== path) window.history.pushState({}, '', path);
@@ -86,32 +80,12 @@ export const App: React.FC = () => {
       setDispatcherRoute(next.route);
       if (next.route === 'order-details') setSelectedOrderId(next.id ?? null);
       if (next.route === 'planned-trip') setPlannedTripId(next.id ?? null);
+      if (next.route === 'loading-shortfall') setShortfallTripId(next.id ?? null);
       if (next.route === 'live-trip-detail' || next.route === 'live-trip-map') setSelectedTrackingTripId(next.id ?? '');
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [isDispatcherPath]);
-
-  useEffect(() => {
-    const handleHashChange = () => {
-      if (window.location.hash === '#login') {
-        setCurrentUser(null);
-        localStorage.removeItem('waypoint_loader_session');
-      } else if (window.location.hash === '#loading' || window.location.hash === '#portal') {
-        const user = { email: 'kumar.s@waypoint.com', role: 'LOADER' };
-        setCurrentUser(user);
-        localStorage.setItem('waypoint_loader_session', JSON.stringify(user));
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('waypoint_loader_session');
-    window.location.hash = '#login';
-  };
 
   const handleGlobalNavigate = (target: string) => {
     if (target === 'route-planning') target = 'planning';
@@ -121,6 +95,10 @@ export const App: React.FC = () => {
     if (target.startsWith('planned-trip/')) {
       const id = target.slice('planned-trip/'.length); setPlannedTripId(id);
       return navigate('planned-trip', `/dispatcher/planning/trips/${encodeURIComponent(id)}`);
+    }
+    if (target.startsWith('loading-shortfall/')) {
+      const id = target.slice('loading-shortfall/'.length); setShortfallTripId(id);
+      return navigate('loading-shortfall', `/dispatcher/planning/trips/${encodeURIComponent(id)}/loading-shortfall`);
     }
     if (target.startsWith('live-trip-detail/')) {
       const id = target.slice('live-trip-detail/'.length); setSelectedTrackingTripId(id);
@@ -142,17 +120,26 @@ export const App: React.FC = () => {
     navigate('planning', dispatcherPaths.planning!);
   };
 
-  if (currentUser) return <LoadingPortalPage onLogout={handleLogout} />;
-
   if (isDispatcherPath) {
+    if (session?.user.role !== 'DISPATCHER') {
+      return (
+        <BrowserRouter>
+          <Routes>
+            <Route element={<Navigate replace to="/login" />} path="*" />
+          </Routes>
+        </BrowserRouter>
+      );
+    }
+
     switch (dispatcherRoute) {
       case 'dashboard': return <DispatcherDashboardPage onNavigateGlobal={handleGlobalNavigate} />;
       case 'orders': return <OrdersQueuePage onNavigateGlobal={handleGlobalNavigate} onViewOrderDetails={handleViewOrderDetails} onPlanOrders={handlePlanOrders} />;
       case 'order-details': return <OrderDetailsPage orderId={selectedOrderId ?? ''} onNavigateGlobal={handleGlobalNavigate} onBack={() => window.history.back()} onPlanOrder={handlePlanOrders} />;
       case 'planning': return <RoutePlanningPage onNavigateGlobal={handleGlobalNavigate} selectedOrders={planningSelectedOrders} />;
       case 'planned-trip': return <PlannedTripDetailPage tripId={plannedTripId ?? ''} onNavigateGlobal={handleGlobalNavigate} />;
+      case 'loading-shortfall': return <LoadingShortfallReviewPage tripId={shortfallTripId ?? ''} onNavigateGlobal={handleGlobalNavigate} />;
       case 'capacity-shortfall': return <CapacityShortfallPage onNavigateGlobal={handleGlobalNavigate} onBackToPlanning={() => navigate('planning', dispatcherPaths.planning!)} />;
-      case 'deferred-orders': return <DeferredOrdersPage onNavigateGlobal={handleGlobalNavigate} />;
+      case 'deferred-orders': return <DeferredOrdersPage onNavigateGlobal={handleGlobalNavigate} onPlanOrders={handlePlanOrders} />;
       case 'live-tracking': return <LiveTrackingPage onNavigateGlobal={handleGlobalNavigate} selectedTripId={selectedTrackingTripId} onSelectTrip={setSelectedTrackingTripId} />;
       case 'live-trip-detail': return <TripDetailPage tripId={selectedTrackingTripId} onNavigateGlobal={handleGlobalNavigate} onBack={() => window.history.back()} />;
       case 'live-trip-map': return <TripLiveMapPage tripId={selectedTrackingTripId} onNavigateGlobal={handleGlobalNavigate} onBack={() => window.history.back()} />;
@@ -164,7 +151,7 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Navigate replace to="/store-manager" />} path="/" />
+        <Route element={<Navigate replace to="/login" />} path="/" />
         <Route element={<LoginPage />} path="/login" />
         <Route element={<StoreManagerRouteGuard />} path="/store-manager">
           <Route element={<StoreManagerLayout />}>
@@ -179,7 +166,7 @@ export const App: React.FC = () => {
             <Route element={<ReceivingPage />} path="receiving" />
           </Route>
         </Route>
-        <Route element={<Navigate replace to="/store-manager" />} path="*" />
+        <Route element={<Navigate replace to="/login" />} path="*" />
       </Routes>
     </BrowserRouter>
   );

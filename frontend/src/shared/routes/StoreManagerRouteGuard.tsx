@@ -5,7 +5,7 @@ export function StoreManagerRouteGuard() {
   const location = useLocation();
   const session = authSession.get();
 
-  if (session && session.user.role !== 'STORE_MANAGER') {
+  if (!session || session.user.role !== 'STORE_MANAGER') {
     return <Navigate replace to="/" />;
   }
   return <Outlet />;

@@ -35,6 +35,7 @@ public class GlobalExceptionMiddleware
         var statusCode = (int)HttpStatusCode.InternalServerError;
         var errorCode = "INTERNAL_ERROR";
         var message = "An internal server error occurred.";
+        var environment = context.RequestServices.GetRequiredService<IHostEnvironment>();
 
         switch (exception)
         {
@@ -61,7 +62,8 @@ public class GlobalExceptionMiddleware
         {
             error = errorCode,
             message = message,
-            statusCode = statusCode
+            statusCode = statusCode,
+            detail = environment.IsDevelopment() ? exception.ToString() : null
         });
 
         return context.Response.WriteAsync(result);

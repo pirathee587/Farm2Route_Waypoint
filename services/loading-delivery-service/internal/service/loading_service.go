@@ -548,6 +548,14 @@ func (s *LoadingService) GetShortfalls(ctx context.Context, idOrCode string) ([]
 	return s.loaderRepo.GetShortfallsByTrip(ctx, trip.TripID)
 }
 
+func (s *LoadingService) ResolveShortfall(ctx context.Context, issueID string, resolvedBy uuid.UUID, notes string) error {
+	id, err := uuid.Parse(issueID)
+	if err != nil {
+		return model.ErrBadRequest("Invalid shortfall ID")
+	}
+	return s.loaderRepo.ResolveShortfall(ctx, id, resolvedBy, notes)
+}
+
 // ResetDemo restores all demo trips and sequence state
 func (s *LoadingService) ResetDemo(ctx context.Context) error {
 	return s.loaderRepo.ResetDemoState(ctx)
