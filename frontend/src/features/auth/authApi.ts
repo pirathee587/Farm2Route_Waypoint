@@ -77,13 +77,22 @@ export const authApi = {
         };
       }
 
+      const email = credentials.email.toLowerCase();
+      const fallbackRole: AuthUser['role'] = email.includes('dispatcher')
+        ? 'DISPATCHER'
+        : email.includes('driver')
+          ? 'DRIVER'
+          : email.includes('manager')
+            ? 'STORE_MANAGER'
+            : 'LOADER';
+
       return persistSession({
         success: true,
         accessToken: 'mock-jwt-token-waypoint',
         user: {
           id: 'user-001',
           email: credentials.email,
-          role: 'LOADER',
+          role: fallbackRole,
           fullName: 'S. Perera',
         },
       });
