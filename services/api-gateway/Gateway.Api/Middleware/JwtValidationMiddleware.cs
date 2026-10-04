@@ -64,6 +64,9 @@ public sealed class JwtValidationMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
+        // Never trust outlet identity supplied by a client, including on public routes.
+        context.Request.Headers.Remove("X-Outlet-Id");
+
         // ── 1. Whitelist check — public routes bypass JWT ─────────────────
         if (IsPublicRoute(path))
         {
@@ -122,6 +125,7 @@ public sealed class JwtValidationMiddleware
         var email  = GetClaim(claims, "email");
         var role   = GetClaim(claims, "role");
         var name   = GetClaim(claims, "name");
+        var outletId = GetClaim(claims, "outlet_id");
 
         if (string.IsNullOrEmpty(userId))
         {
@@ -140,6 +144,10 @@ public sealed class JwtValidationMiddleware
         context.Request.Headers["X-User-Email"] = email;
         context.Request.Headers["X-User-Role"]  = role;
         context.Request.Headers["X-User-Name"]  = name;
+        if (!string.IsNullOrWhiteSpace(outletId))
+        {
+            context.Request.Headers["X-Outlet-Id"] = outletId;
+        }
 
         // Also set the ClaimsPrincipal so ASP.NET authorization policies work
         context.User = principal;

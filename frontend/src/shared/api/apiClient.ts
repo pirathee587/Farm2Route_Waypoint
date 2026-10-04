@@ -34,7 +34,7 @@ export interface OrderSummary {
   id: string;
   brand: string;
   order_type: string | null;
-  requested_delivery_date: string;
+  requested_delivery_date: string | null;
   status: string;
   item_count: number;
   summary: string;
