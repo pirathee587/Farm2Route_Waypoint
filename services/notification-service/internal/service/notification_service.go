@@ -48,6 +48,21 @@ func NewNotificationService(
 // eventType must be one of the model.EventType* constants.
 // payloadJSON is the raw event body (stored as context in the notification record).
 func (s *NotificationService) HandleEvent(ctx context.Context, eventType string, rawPayload []byte) error {
+	if eventType == model.EventTypeDriverNotification {
+		var push struct {
+			UserID  string          `json:"user_id"`
+			Type    string          `json:"type"`
+			Title   string          `json:"title"`
+			Body    string          `json:"body"`
+			Payload json.RawMessage `json:"payload"`
+		}
+		if err := json.Unmarshal(rawPayload, &push); err != nil {
+			return err
+		}
+		message, _ := json.Marshal(map[string]any{"type": "notification", "eventType": push.Type, "title": push.Title, "body": push.Body, "payload": push.Payload})
+		s.broadcaster.BroadcastToUser(push.UserID, message)
+		return nil
+	}
 	title, body, err := s.buildNotificationText(eventType, rawPayload)
 	if err != nil {
 		s.logger.Warn("Could not build notification text; using generic message",

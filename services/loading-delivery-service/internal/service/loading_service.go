@@ -86,6 +86,9 @@ func (s *LoadingService) GetTodayLoads(ctx context.Context, filter model.TripsFi
 		switch derivedStatus {
 		case model.DerivedStatusIssue:
 			summary.IssuesNeedReview++
+			// Issue is a pending departure state. Keep it in the pending total
+			// while exposing the review subset separately.
+			summary.Pending++
 		case model.DerivedStatusReady:
 			summary.Loaded++
 		case model.DerivedStatusLoading:

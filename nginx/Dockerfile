@@ -9,10 +9,10 @@ FROM node:20-alpine AS frontend-build
 WORKDIR /app
 
 # Copy frontend source
-COPY ../frontend/package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci --silent
 
-COPY ../frontend .
+COPY frontend .
 RUN npm run build
 
 # ── Stage 2: Nginx Runtime ────────────────────────────────────────────────
@@ -22,14 +22,18 @@ FROM nginx:1.25-alpine AS runtime
 RUN rm /etc/nginx/conf.d/default.conf
 
 # Copy our custom config
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
 
 # Copy React build output to nginx html root
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 
 # Copy self-signed certs (generated via openssl — see README.md)
 # In CI/CD, mount real certs as a secret/volume instead
-COPY certs/ /etc/nginx/certs/
+RUN apk add --no-cache openssl && mkdir -p /etc/nginx/certs && \
+    openssl req -x509 -nodes -newkey rsa:2048 -days 30 \
+      -keyout /etc/nginx/certs/waypoint.key \
+      -out /etc/nginx/certs/waypoint.crt \
+      -subj "/CN=localhost"
 
 # Create directories nginx needs
 RUN mkdir -p /var/www/certbot && \

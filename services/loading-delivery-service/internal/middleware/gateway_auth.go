@@ -123,3 +123,19 @@ func RequireLoaderOrDispatcher(next http.Handler) http.Handler {
 		}
 	})
 }
+
+// RequireDriver restricts driver portal APIs to gateway-verified DRIVER users.
+func RequireDriver(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := GetUserFromContext(r.Context())
+		if !ok {
+			model.ErrUnauthorized("User identity not found in context").WriteJSON(w)
+			return
+		}
+		if user.Role != "DRIVER" {
+			model.ErrForbidden("Forbidden: Driver role required").WriteJSON(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

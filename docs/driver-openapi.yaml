@@ -1,0 +1,79 @@
+openapi: 3.0.3
+info:
+  title: Waypoint Driver API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+components:
+  parameters:
+    GatewayVerified: {name: X-Gateway-Verified, in: header, required: true, schema: {type: string, enum: ['true']}}
+    UserId: {name: X-User-Id, in: header, required: true, schema: {type: string, format: uuid}}
+    UserRole: {name: X-User-Role, in: header, required: true, schema: {type: string, enum: [DRIVER]}}
+  schemas:
+    Error: {type: object, required: [error], properties: {error: {type: string}, code: {type: string}}}
+    SyncAction: {type: object, required: [client_action_id, type, stop_id, client_timestamp, payload], properties: {client_action_id: {type: string, format: uuid}, type: {type: string, enum: [ARRIVAL, DELIVERY, ISSUE]}, stop_id: {type: string, format: uuid}, client_timestamp: {type: string, format: date-time}, payload: {type: object}}}
+  responses:
+    BadRequest: {description: Invalid input, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Gateway or role/ownership rejected, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: Resource not found, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: Invalid resource state, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+paths:
+  /api/delivery/driver/today: {$ref: '#/x-read'}
+  /api/delivery/driver/trips/{tripId}/stops: {$ref: '#/x-read-trip'}
+  /api/delivery/driver/dispatcher-contact: {$ref: '#/x-read'}
+  /api/delivery/driver/stops/{stopId}: {$ref: '#/x-read-stop'}
+  /api/delivery/driver/stops/{stopId}/arrive: {$ref: '#/x-write-stop'}
+  /api/delivery/driver/stops/{stopId}/window-status: {$ref: '#/x-read-stop'}
+  /api/delivery/driver/cant-deliver/reasons: {$ref: '#/x-read'}
+  /api/delivery/driver/stops/{stopId}/cant-deliver: {$ref: '#/x-write-stop'}
+  /api/delivery/driver/stops/{stopId}/pod: {$ref: '#/x-read-stop'}
+  /api/delivery/driver/stops/{stopId}/pod/signature: {$ref: '#/x-write-stop'}
+  /api/delivery/driver/stops/{stopId}/pod/photo: {$ref: '#/x-write-stop'}
+  /api/delivery/driver/stops/{stopId}/confirm: {$ref: '#/x-write-stop'}
+  /api/delivery/driver/trips/{tripId}/route: {$ref: '#/x-read-trip'}
+  /api/delivery/driver/trips/{tripId}/route/geometry: {$ref: '#/x-read-trip'}
+  /api/delivery/driver/profile: {$ref: '#/x-read'}
+  /api/delivery/driver/heartbeat: {$ref: '#/x-write'}
+  /api/delivery/driver/history: {$ref: '#/x-read'}
+  /api/delivery/driver/notifications: {$ref: '#/x-read'}
+  /api/delivery/driver/notifications/{id}/review: {$ref: '#/x-write-id'}
+  /api/delivery/driver/notifications/read-all: {$ref: '#/x-write'}
+  /api/delivery/driver/notifications/history: {$ref: '#/x-read'}
+  /api/delivery/driver/sync:
+    post:
+      summary: Replay offline actions
+      parameters: [{$ref: '#/components/parameters/GatewayVerified'}, {$ref: '#/components/parameters/UserId'}, {$ref: '#/components/parameters/UserRole'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {actions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SyncAction'}}}}}}}
+      responses: {'200': {description: Batch results}, '400': {$ref: '#/components/responses/BadRequest'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /api/delivery/driver/sync/verify: {$ref: '#/x-write'}
+  /api/delivery/driver/sync/conflicts: {$ref: '#/x-read'}
+  /api/delivery/driver/sync/media/{client_action_id}: {$ref: '#/x-write-action'}
+  /api/delivery/driver/trips/{tripId}/summary: {$ref: '#/x-read-trip'}
+  /api/delivery/driver/trips/{tripId}/outcomes: {$ref: '#/x-read-trip'}
+  /api/delivery/driver/trips/{tripId}/complete: {$ref: '#/x-write-trip'}
+x-auth: &auth
+  - {$ref: '#/components/parameters/GatewayVerified'}
+  - {$ref: '#/components/parameters/UserId'}
+  - {$ref: '#/components/parameters/UserRole'}
+x-read: &read
+  get: {parameters: *auth, responses: {'200': {description: Success}, '403': {$ref: '#/components/responses/Forbidden'}}}
+x-write: &write
+  post: {parameters: *auth, responses: {'200': {description: Success}, '400': {$ref: '#/components/responses/BadRequest'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}}
+x-read-trip: &readTrip
+  parameters: [{name: tripId, in: path, required: true, schema: {type: string, format: uuid}}]
+  get: {parameters: *auth, responses: {'200': {description: Success}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}}
+x-write-trip: &writeTrip
+  parameters: [{name: tripId, in: path, required: true, schema: {type: string, format: uuid}}]
+  post: {parameters: *auth, responses: {'200': {description: Success}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}}
+x-read-stop: &readStop
+  parameters: [{name: stopId, in: path, required: true, schema: {type: string, format: uuid}}]
+  get: {parameters: *auth, responses: {'200': {description: Success}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}}
+x-write-stop: &writeStop
+  parameters: [{name: stopId, in: path, required: true, schema: {type: string, format: uuid}}]
+  post: {parameters: *auth, responses: {'200': {description: Success}, '400': {$ref: '#/components/responses/BadRequest'}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}}
+x-write-id: &writeId
+  parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post: {parameters: *auth, responses: {'200': {description: Success}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}}
+x-write-action: &writeAction
+  parameters: [{name: client_action_id, in: path, required: true, schema: {type: string, format: uuid}}]
+  post: {parameters: *auth, responses: {'200': {description: Success}, '400': {$ref: '#/components/responses/BadRequest'}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}}

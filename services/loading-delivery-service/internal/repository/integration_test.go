@@ -156,10 +156,10 @@ func TestIntegration_ListTodayLoads(t *testing.T) {
 	repo := repository.NewLoaderRepository(pool)
 	ctx := context.Background()
 
-	// 1. Fetch raw trips for today: 2026-10-03
-	rawTrips, err := repo.FetchRawTripsForDate(ctx, "2026-10-03")
+	// Fetch the rolling CURRENT_DATE fixture.
+	rawTrips, err := repo.FetchRawTripsForDate(ctx, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, rawTrips, "Expected seeded trips for 2026-10-03")
+	require.NotEmpty(t, rawTrips, "expected seeded trips for CURRENT_DATE")
 
 	// Map trips by VehicleID
 	tripMap := make(map[string]repository.RawTripRecord)
@@ -278,6 +278,36 @@ func TestIntegration_ListTodayLoads(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 	assert.Empty(t, invalidLoadOrders, "every seeded trip must load in reverse delivery order")
+
+	// Report every integrity violation with its vehicle and stop name so a
+	// broken fixture is immediately actionable.
+	violations, err := pool.Query(ctx, `
+		SELECT t.vehicle_id,COALESCE(s.outlet_name,'<trip>'),problem FROM (
+		  SELECT s.trip_id,s.stop_id,'stop has zero items' problem FROM public.load_stops s
+		  WHERE NOT EXISTS(SELECT 1 FROM public.load_items i WHERE i.stop_id=s.stop_id)
+		  UNION ALL SELECT s.trip_id,s.stop_id,'PENDING stop has terminal item' FROM public.load_stops s
+		  WHERE s.status='PENDING' AND EXISTS(SELECT 1 FROM public.load_items i WHERE i.stop_id=s.stop_id AND i.status<>'PENDING')
+		  UNION ALL SELECT s.trip_id,s.stop_id,'LOADED stop has unresolved item' FROM public.load_stops s
+		  WHERE s.status='LOADED' AND EXISTS(SELECT 1 FROM public.load_items i WHERE i.stop_id=s.stop_id AND i.status NOT IN('CHECKED','ISSUE'))
+		  UNION ALL SELECT t.trip_id,NULL::uuid,'trip driver or vehicle missing' FROM public.trips t
+		  LEFT JOIN public.user_profiles u ON u.id=t.driver_id LEFT JOIN public.vehicles v ON v.vehicle_id=t.vehicle_id
+		  WHERE u.id IS NULL OR v.vehicle_id IS NULL
+		  UNION ALL SELECT t.trip_id,NULL::uuid,'reefer/cold-item mismatch' FROM public.trips t JOIN public.vehicles v ON v.vehicle_id=t.vehicle_id
+		  WHERE (v.temp='reefer') <> EXISTS(SELECT 1 FROM public.load_items i WHERE i.trip_id=t.trip_id AND (i.tags@>ARRAY['chilled']::text[] OR i.tags@>ARRAY['frozen']::text[]))
+		  UNION ALL SELECT s.trip_id,s.stop_id,'item brand tag differs from outlet brand' FROM public.load_stops s JOIN public.outlets o ON o.outlet_id=s.outlet_id
+		  WHERE EXISTS(SELECT 1 FROM public.load_items i WHERE i.stop_id=s.stop_id AND lower(i.tags[1])<>o.brand::text)
+		) bad JOIN public.trips t ON t.trip_id=bad.trip_id LEFT JOIN public.load_stops s ON s.stop_id=bad.stop_id
+		ORDER BY t.vehicle_id,COALESCE(s.outlet_name,'<trip>')`)
+	require.NoError(t, err)
+	defer violations.Close()
+	var integrityFailures []string
+	for violations.Next() {
+		var vehicle, stop, problem string
+		require.NoError(t, violations.Scan(&vehicle, &stop, &problem))
+		integrityFailures = append(integrityFailures, fmt.Sprintf("%s / %s: %s", vehicle, stop, problem))
+	}
+	require.NoError(t, violations.Err())
+	assert.Empty(t, integrityFailures, "all seeded trips must satisfy loader integrity rules")
 }
 
 func TestIntegration_FilterOptions(t *testing.T) {
@@ -289,38 +319,37 @@ func TestIntegration_FilterOptions(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Unfiltered request
-	respAll, err := svc.GetTodayLoads(ctx, model.TripsFilter{Date: "2026-10-03"})
+	respAll, err := svc.GetTodayLoads(ctx, model.TripsFilter{Date: "", Depot: "Peliyagoda"})
 	require.NoError(t, err)
-	assert.Len(t, respAll.Trips, 7, "Dispatcher view should include six Peliyagoda trips and one Kandy trip")
-	assert.Equal(t, 7, respAll.Summary.TripsToday)
-	assert.Equal(t, 2, respAll.Summary.Loaded)
-	assert.Equal(t, 2, respAll.Summary.InProgress)
+	assert.Len(t, respAll.Trips, 12, "Peliyagoda loader must see twelve trips")
+	assert.Equal(t, 12, respAll.Summary.TripsToday)
+	assert.Equal(t, 5, respAll.Summary.Loaded)
+	assert.Equal(t, 4, respAll.Summary.InProgress)
 	assert.Equal(t, 1, respAll.Summary.IssuesNeedReview)
-	assert.Equal(t, 2, respAll.Summary.Pending)
+	assert.Equal(t, 3, respAll.Summary.Pending)
 
 	// 2. Filter by status: Ready
 	respReady, err := svc.GetTodayLoads(ctx, model.TripsFilter{
-		Date:     "2026-10-03",
+		Depot:    "Peliyagoda",
 		Statuses: []string{"Ready"},
 	})
 	require.NoError(t, err)
-	assert.Len(t, respReady.Trips, 2, "Filtered trips should only return 2 Ready trips")
+	assert.Len(t, respReady.Trips, 5, "Filtered trips should only return 5 Ready trips")
 	for _, tr := range respReady.Trips {
 		assert.Equal(t, "Ready", tr.Status)
 	}
 	// SUMMARY COUNTS MUST BE INDEPENDENT OF ACTIVE FILTERS
-	assert.Equal(t, 7, respReady.Summary.TripsToday, "Summary must remain depot-wide even with status filter")
-	assert.Equal(t, 2, respReady.Summary.Loaded, "Summary loaded must remain 2")
+	assert.Equal(t, 12, respReady.Summary.TripsToday, "Summary must remain depot-wide even with status filter")
+	assert.Equal(t, 5, respReady.Summary.Loaded, "Summary loaded must remain 5")
 
 	// 3. Filter by dock: Dock A5
 	respDock, err := svc.GetTodayLoads(ctx, model.TripsFilter{
-		Date:  "2026-10-03",
+		Depot: "Peliyagoda",
 		Docks: []string{"Dock A5"},
 	})
 	require.NoError(t, err)
-	assert.Len(t, respDock.Trips, 1)
-	assert.Equal(t, "TRC-204", respDock.Trips[0].VehicleID)
-	assert.Equal(t, 7, respDock.Summary.TripsToday, "Summary must remain independent of dock filter")
+	assert.Len(t, respDock.Trips, 2)
+	assert.Equal(t, 12, respDock.Summary.TripsToday, "Summary must remain independent of dock filter")
 
 	// 4. Depot meta check
 	assert.Equal(t, "Peliyagoda Distribution Center", respAll.Meta.Depot)
@@ -397,17 +426,17 @@ func TestIntegration_VLoadStopProgress(t *testing.T) {
 	for _, stop := range detailStops {
 		tagsByStop[stop.StopNo] = stop.Tags
 	}
-	assert.ElementsMatch(t, []string{"Fresh", "chilled", "reefer"}, tagsByStop[4])
-	assert.ElementsMatch(t, []string{"Tech", "fragile"}, tagsByStop[3])
-	assert.ElementsMatch(t, []string{"Style", "ambient"}, tagsByStop[2])
-	assert.ElementsMatch(t, []string{"Fresh", "chilled", "van_only"}, tagsByStop[1])
+	assert.ElementsMatch(t, []string{"fresh", "chilled", "reefer"}, tagsByStop[4])
+	assert.ElementsMatch(t, []string{"style"}, tagsByStop[3])
+	assert.ElementsMatch(t, []string{"fresh", "chilled", "reefer"}, tagsByStop[2])
+	assert.ElementsMatch(t, []string{"tech"}, tagsByStop[1])
 
 	trc211, err := repo.GetTripByTripCodeOrID(ctx, "TRC-211")
 	require.NoError(t, err)
 	trc211Stops, err := repo.GetStopsWithProgressByTripID(ctx, trc211.TripID)
 	require.NoError(t, err)
 	require.NotEmpty(t, trc211Stops)
-	assert.ElementsMatch(t, []string{"Tech", "fragile"}, trc211Stops[0].Tags)
+	assert.ElementsMatch(t, []string{"tech", "van_only"}, trc211Stops[0].Tags)
 }
 
 func TestIntegration_SRSequence(t *testing.T) {
@@ -865,15 +894,15 @@ func TestIntegration_AllocationCompletedRabbitMQ(t *testing.T) {
 		 ('P4-OUT-C','P4 Outlet C','Colombo District','DEPOT-01','STANDARD') ON CONFLICT(outlet_id) DO NOTHING`)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
-		INSERT INTO public.vehicles(vehicle_id,registration,type,weight_cap_kg,volume_cap_m3,temp_capability,depot,brand,driver_id)
-		 VALUES('TRC-404','P4-404','TRUCK',5000,20,'AMBIENT','DEPOT-01','Fresh',$1) ON CONFLICT(vehicle_id) DO NOTHING`, driverID)
+		INSERT INTO public.vehicles(vehicle_id,registration,type,temp,weight_cap_kg,volume_cap_m3,temp_capability,depot,brand,driver_id)
+		 VALUES('TRC-404','P4-404','truck','ambient',5000,20,'AMBIENT','DEPOT-01','Fresh',$1) ON CONFLICT(vehicle_id) DO NOTHING`, driverID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
-		INSERT INTO public.orders(order_id,outlet_id,product_code,quantity,weight_kg,volume_m3,brand,temp_requirement,preferred_date,window_open,window_close,status)
+		INSERT INTO public.orders(id,outlet_id,product_code,quantity,weight_kg,volume_m3,brand,temp_requirement,preferred_date,window_open,window_close,status)
 		 VALUES
-		 ('44444444-4444-4444-4444-444444444401','P4-OUT-A','SKU-A',10,100,1,'Fresh','AMBIENT','2026-10-04','08:00','17:00','ALLOCATED'),
-		 ('44444444-4444-4444-4444-444444444402','P4-OUT-B','SKU-B',20,200,2,'Fresh','AMBIENT','2026-10-04','08:00','17:00','ALLOCATED'),
-		 ('44444444-4444-4444-4444-444444444403','P4-OUT-C','SKU-C',30,300,3,'Fresh','AMBIENT','2026-10-04','08:00','17:00','ALLOCATED') ON CONFLICT(order_id) DO NOTHING`)
+		 ('44444444-4444-4444-4444-444444444401','P4-OUT-A','SKU-A',10,100,1,'fresh','AMBIENT','2026-10-04','08:00','17:00','ALLOCATED'),
+		 ('44444444-4444-4444-4444-444444444402','P4-OUT-B','SKU-B',20,200,2,'fresh','AMBIENT','2026-10-04','08:00','17:00','ALLOCATED'),
+		 ('44444444-4444-4444-4444-444444444403','P4-OUT-C','SKU-C',30,300,3,'fresh','AMBIENT','2026-10-04','08:00','17:00','ALLOCATED') ON CONFLICT(id) DO NOTHING`)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
 		INSERT INTO public.trips(trip_id,vehicle_id,driver_id,trip_number,delivery_date,status,stop_sequence,total_weight_kg,total_volume_m3)

@@ -684,12 +684,12 @@ func (r *LoaderRepository) GetStopsWithProgressByTripID(ctx context.Context, tri
 			COALESCE(s.status, 'PENDING') AS status,
 			s.change_flag,
 			(SELECT COUNT(*) FROM public.load_stops sub WHERE sub.trip_id = s.trip_id)::INT AS total_stops,
-			COALESCE(o.brand, '') AS outlet_brand,
+			COALESCE(o.brand::text, '') AS outlet_brand,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'chilled'=ANY(li.tags)) AS has_chilled,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'frozen'=ANY(li.tags)) AS has_frozen,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'fragile'=ANY(li.tags)) AS has_fragile,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'ambient'=ANY(li.tags)) AS has_ambient,
-			COALESCE(o.parking_constraint, '') AS parking_constraint
+			COALESCE(o.parking_constraint::text, '') AS parking_constraint
 		FROM public.v_load_stop_progress s
 		LEFT JOIN public.outlets o ON s.outlet_id = o.outlet_id
 		WHERE s.trip_id = $1
@@ -1757,6 +1757,12 @@ func (r *LoaderRepository) ResetDemoState(ctx context.Context) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM public.outbox_events`); err != nil {
 		return fmt.Errorf("failed to clear outbox events: %w", err)
 	}
+	// Remove the allocation-consumer integration fixture if it was created in
+	// this database, so reset-demo always returns exactly the canonical 12
+	// Peliyagoda trips (plus the separately scoped Kandy trip).
+	if _, err := tx.Exec(ctx, `DELETE FROM public.trips WHERE trip_id='44444444-4444-4444-4444-444444444404'`); err != nil {
+		return fmt.Errorf("failed to clear non-demo allocation fixture: %w", err)
+	}
 
 	// 3. Clear plan changes for WPT-204
 	if _, err := tx.Exec(ctx, `DELETE FROM public.plan_changes WHERE trip_id = $1`, vTrip204); err != nil {
@@ -1859,7 +1865,7 @@ func (r *LoaderRepository) ResetDemoState(ctx context.Context) error {
 		return fmt.Errorf("failed to reset outlet parking constraints: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE public.outlets o SET brand=x.brand
+		UPDATE public.outlets o SET brand=lower(x.brand)::public.order_brand
 		FROM (
 			SELECT s.outlet_id,CASE
 				WHEN BOOL_OR('Fresh'=ANY(i.tags)) THEN 'Fresh'
@@ -1875,10 +1881,10 @@ func (r *LoaderRepository) ResetDemoState(ctx context.Context) error {
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE public.outlets SET brand=CASE outlet_id
-			WHEN 'OUT-KEELLS-01' THEN 'Fresh'
-			WHEN 'OUT-SINGER-01' THEN 'Tech'
-			WHEN 'OUT-STYLEHUB-01' THEN 'Style'
-			WHEN 'OUT-FRESHMART-01' THEN 'Fresh'
+			WHEN 'OUT-KEELLS-01' THEN 'fresh'::public.order_brand
+			WHEN 'OUT-SINGER-01' THEN 'tech'::public.order_brand
+			WHEN 'OUT-STYLEHUB-01' THEN 'style'::public.order_brand
+			WHEN 'OUT-FRESHMART-01' THEN 'fresh'::public.order_brand
 			ELSE brand END
 		WHERE outlet_id IN ('OUT-KEELLS-01','OUT-SINGER-01','OUT-STYLEHUB-01','OUT-FRESHMART-01')
 	`); err != nil {
@@ -1948,7 +1954,14 @@ func (r *LoaderRepository) ResetDemoState(ctx context.Context) error {
 		return fmt.Errorf("failed to restore demo confirmation versions: %w", err)
 	}
 
-	// 9. Reset sequence to 481 so next live shortfall generates SR-0482
+	// 9. Reapply the complete DB-owned loader demo fixture. This restores all
+	// twelve Peliyagoda trips, the Kandy-independent scope, TRC-162 plan changes,
+	// fixed Colombo clock times, and every derived item/stop state in one place.
+	if _, err := tx.Exec(ctx, `SELECT public.seed_loader_demo_data()`); err != nil {
+		return fmt.Errorf("failed to restore complete loader demo data: %w", err)
+	}
+
+	// 10. Reset sequence to 481 so next live shortfall generates SR-0482
 	if _, err := tx.Exec(ctx, `SELECT setval('public.issue_flag_ref_seq', 481, true)`); err != nil {
 		return fmt.Errorf("failed to reset sequence: %w", err)
 	}

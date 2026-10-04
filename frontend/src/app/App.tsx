@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from '@/pages/login/LoginPage';
+import { LoadingPortalPage } from '@/pages/loading/LoadingPortalPage';
+import { DriverPortalPage } from '@/pages/delivery/DriverPortalPage';
 import { authSession } from '@/features/auth/authSession';
 import { StoreManagerLayout } from '@/shared/layouts/StoreManagerLayout';
 import { StoreManagerRouteGuard } from '@/shared/routes/StoreManagerRouteGuard';
@@ -56,6 +58,11 @@ const dispatcherPaths: Partial<Record<DispatcherRoute, string>> = {
   'live-tracking': '/dispatcher/tracking', fleet: '/dispatcher/fleet', reports: '/dispatcher/reports',
 };
 
+const FullPageRedirect: React.FC<{ to: string }> = ({ to }) => {
+  useEffect(() => window.location.replace(to), [to]);
+  return null;
+};
+
 export const App: React.FC = () => {
   const isDispatcherPath = window.location.pathname.startsWith('/dispatcher');
   const session = authSession.get();
@@ -66,6 +73,18 @@ export const App: React.FC = () => {
   const [shortfallTripId, setShortfallTripId] = useState<string | null>(initial.route === 'loading-shortfall' ? initial.id ?? null : null);
   const [planningSelectedOrders, setPlanningSelectedOrders] = useState<QueueOrder[]>([]);
   const [selectedTrackingTripId, setSelectedTrackingTripId] = useState(initial.route === 'live-trip-detail' || initial.route === 'live-trip-map' ? initial.id ?? '' : 'TRIP-0925-014');
+  const [currentUser, setCurrentUser] = useState<{ email: string; role?: string } | null>(() => {
+    const storedSession = localStorage.getItem('waypoint_auth_session');
+    if (storedSession) {
+      try { return JSON.parse(storedSession).user; } catch { return null; }
+    }
+    const storedUser = localStorage.getItem('waypoint_loader_session');
+    if (storedUser) {
+      try { return JSON.parse(storedUser); } catch { return null; }
+    }
+    return null;
+  });
+
   const navigate = (next: DispatcherRoute, path: string, replace = false) => {
     if (replace) window.history.replaceState({}, '', path);
     else if (window.location.pathname !== path) window.history.pushState({}, '', path);
@@ -86,6 +105,13 @@ export const App: React.FC = () => {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [isDispatcherPath]);
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('waypoint_loader_session');
+    authSession.clear();
+    window.location.assign('/login');
+  };
 
   const handleGlobalNavigate = (target: string) => {
     if (target === 'route-planning') target = 'planning';
@@ -120,17 +146,19 @@ export const App: React.FC = () => {
     navigate('planning', dispatcherPaths.planning!);
   };
 
-  if (isDispatcherPath) {
-    if (session?.user.role !== 'DISPATCHER') {
-      return (
-        <BrowserRouter>
-          <Routes>
-            <Route element={<Navigate replace to="/login" />} path="*" />
-          </Routes>
-        </BrowserRouter>
-      );
-    }
+  if (currentUser?.role === 'DRIVER') {
+    return <DriverPortalPage currentUser={currentUser} onLogout={handleLogout} />;
+  }
 
+  if (currentUser?.role === 'LOADER') {
+    return <LoadingPortalPage onLogout={handleLogout} />;
+  }
+
+  if (isDispatcherPath) {
+    if (!currentUser) return <FullPageRedirect to="/login" />;
+    if (currentUser.role !== 'DISPATCHER' && currentUser.role !== 'ADMIN') {
+      return <FullPageRedirect to={currentUser.role === 'STORE_MANAGER' ? '/store-manager' : '/login'} />;
+    }
     switch (dispatcherRoute) {
       case 'dashboard': return <DispatcherDashboardPage onNavigateGlobal={handleGlobalNavigate} />;
       case 'orders': return <OrdersQueuePage onNavigateGlobal={handleGlobalNavigate} onViewOrderDetails={handleViewOrderDetails} onPlanOrders={handlePlanOrders} />;
@@ -151,7 +179,7 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Navigate replace to="/login" />} path="/" />
+        <Route element={<Navigate replace to={currentUser?.role === 'STORE_MANAGER' ? '/store-manager' : '/login'} />} path="/" />
         <Route element={<LoginPage />} path="/login" />
         <Route element={<StoreManagerRouteGuard />} path="/store-manager">
           <Route element={<StoreManagerLayout />}>

@@ -7,7 +7,8 @@ import type { AuthUser } from '@/features/auth/authApi';
 export const LoginPage: React.FC = () => {
   const [screen, setScreen] = useState<AuthScreen>('login');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
-  const [loggedInUser, setLoggedInUser] = useState<{ email: string } | null>(null);
+  const [loggedInUser, setLoggedInUser] = useState<{ email: string; role: string } | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleResize = () => {
@@ -17,14 +18,25 @@ export const LoginPage: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleLoginSuccess = (user: AuthUser) => {
-    if (user.role === 'STORE_MANAGER') {
-      window.location.assign('/store-manager');
-    } else if (user.role === 'DISPATCHER') {
-      window.location.assign('/dispatcher/dashboard');
-    } else {
-      setLoggedInUser({ email: user.email });
+  const handleLoginSuccess = (email: string) => {
+    const user = authSession.get()?.user;
+    if (user?.role === 'STORE_MANAGER') {
+      navigate('/store-manager');
+      return;
     }
+    if (user?.role === 'DRIVER') {
+      window.location.assign('/driver');
+      return;
+    }
+    if (user?.role === 'LOADER') {
+      window.location.assign('/loader');
+      return;
+    }
+    if (user?.role === 'DISPATCHER' || user?.role === 'ADMIN') {
+      window.location.assign('/dispatcher/dashboard');
+      return;
+    }
+    setLoggedInUser({ email, role: user?.role ?? 'User' });
   };
 
   return (
@@ -63,7 +75,7 @@ export const LoginPage: React.FC = () => {
           }}
         >
           <CheckCircle2 size={18} />
-          <span>Signed in as {loggedInUser.email} (Loader Account)</span>
+          <span>Signed in as {loggedInUser.email} ({loggedInUser.role.replace('_', ' ')} Account)</span>
           <button
             type="button"
             onClick={() => setLoggedInUser(null)}
