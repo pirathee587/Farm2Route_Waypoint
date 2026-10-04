@@ -4,9 +4,9 @@ spring:
 
   # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://${SUPABASE_DB_HOST:localhost}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=${DB_SSLMODE:disable}}
-    username: ${SUPABASE_DB_USER:postgres}
-    password: ${SUPABASE_DB_PASSWORD:postgrespassword}
+    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: PlanningHikariPool
@@ -28,11 +28,6 @@ spring:
         default_schema: public
         format_sql: true
     open-in-view: false
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    locations: classpath:db/migration
 
   # ── RabbitMQ ─────────────────────────────────────────────────────────────
   rabbitmq:
@@ -40,7 +35,7 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:waypoint}
     password: ${RABBITMQ_PASSWORD}
-    virtual-host: ${RABBITMQ_VHOST:waypoint}
+    virtual-host: waypoint
     listener:
       simple:
         acknowledge-mode: manual
@@ -68,8 +63,6 @@ management:
 
 # ── gRPC (Order Service connection) ──────────────────────────────────────
 grpc:
-  server:
-    port: ${PLANNING_GRPC_PORT:9090}
   order-service:
     host: ${ORDER_SERVICE_GRPC_HOST:order-service}
     port: ${ORDER_SERVICE_GRPC_PORT:9090}
@@ -86,11 +79,6 @@ waypoint:
       order-placed: order.placed
       order-deferred: order.deferred
       allocation-completed: allocation.completed
-  reference-data:
-    enabled: ${REFERENCE_DATA_ENABLED:true}
-  outbox:
-    enabled: ${OUTBOX_ENABLED:true}
-    poll-ms: ${OUTBOX_POLL_MS:500}
 
 # ── Logging ──────────────────────────────────────────────────────────────
 logging:

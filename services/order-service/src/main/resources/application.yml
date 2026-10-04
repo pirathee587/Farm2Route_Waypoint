@@ -75,6 +75,9 @@ grpc:
     planning-service:
       address: static://${PLANNING_SERVICE_GRPC_HOST:planning-service}:${PLANNING_SERVICE_GRPC_PORT:9090}
       negotiationType: plaintext
+  planning-service:
+    host: ${PLANNING_SERVICE_GRPC_HOST:planning-service}
+    port: ${PLANNING_SERVICE_GRPC_PORT:9090}
 
 waypoint:
   timezone: Asia/Colombo
@@ -82,6 +85,9 @@ waypoint:
   outbox:
     enabled: ${OUTBOX_ENABLED:true}
     poll-ms: ${OUTBOX_POLL_MS:500}
+  seed:
+    data-path: ${SEED_DATA_PATH:/app/data}
+    enabled: true
   rabbitmq:
     exchange: waypoint.events
     queues:
@@ -94,9 +100,6 @@ waypoint:
       allocation-completed: allocation.completed
       order-deferred: order.deferred
       delivery-completed: delivery.completed
-  seed:
-    data-path: ${SEED_DATA_PATH:/app/data}
-    enabled: true
 
 logging:
   level:

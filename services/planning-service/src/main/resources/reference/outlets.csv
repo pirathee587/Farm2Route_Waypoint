@@ -1,6 +1,0 @@
-outlet_id,name,district,depot,brand,parking_type,dock_type,mall_window_open,mall_window_close,last_served_date,store_manager_id
-S1-FRESH-01,FreshMart Central,Colombo District,DEPOT-01,Fresh,STANDARD,STANDARD,,,2026-09-29,
-S1-FRESH-02,Keells Mall,Colombo District,DEPOT-01,Fresh,RESTRICTED,MALL,06:30,07:45,2026-09-28,
-S1-STYLE-01,StyleHub Mall,Gampaha District,DEPOT-01,Style,RESTRICTED,MALL,09:00,12:00,2026-09-25,
-S1-TECH-01,TechPoint Gampaha,Gampaha District,DEPOT-01,Tech,STANDARD,STANDARD,,,2026-09-27,
-S1-VAN-01,Boutique Lane,Colombo District,DEPOT-01,Style,RESTRICTED,VAN_ONLY,,,2026-09-20,
