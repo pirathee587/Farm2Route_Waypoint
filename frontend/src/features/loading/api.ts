@@ -1,5 +1,5 @@
 import { authSession } from '@/features/auth/authSession';
-import type {ApiProblem,Departure,FilterOptions,MarkReadyResponse,ShortfallContext,ShortfallResponse,StopItems,TodayLoadsResponse,TripDetail} from './types';
+import type {ApiProblem,Departure,FilterOptions,MarkReadyResponse,ShortfallContext,ShortfallDetail,ShortfallResponse,StopItems,TodayLoadsResponse,TripDetail} from './types';
 const base='/api/loading';
 async function request<T>(path:string,init?:RequestInit):Promise<T>{const session=authSession.get();const headers=new Headers(init?.headers);if(!(init?.body instanceof FormData)){headers.set('Content-Type','application/json');}if(session?.accessToken){headers.set('Authorization',`Bearer ${session.accessToken}`);}const response=await fetch(`${base}${path}`,{credentials:'include',...init,headers});if(!response.ok){let body:any={};try{body=await response.json()}catch{}throw {status:response.status,code:body.code||`HTTP_${response.status}`,message:body.message||body.error||'Request failed',details:body} satisfies ApiProblem;}return response.status===204?undefined as T:response.json();}
 export const loadingApi={
