@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS public.load_items (
   item_id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
   stop_id          UUID        NOT NULL REFERENCES public.load_stops(stop_id) ON DELETE CASCADE,
   trip_id          UUID        NOT NULL REFERENCES public.trips(trip_id) ON DELETE CASCADE,
-  order_id         UUID        REFERENCES public.orders(id),
+  order_id         UUID        REFERENCES public.orders(order_id),
   sku              TEXT        NOT NULL,
   name             TEXT        NOT NULL,
   expected_qty     INT         NOT NULL CHECK (expected_qty >= 0),

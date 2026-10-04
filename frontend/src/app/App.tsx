@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from '@/pages/login/LoginPage';
 import { LoadingPortalPage } from '@/pages/loading/LoadingPortalPage';
+import { DriverPortalPage } from '@/pages/delivery/DriverPortalPage';
+import { authSession } from '@/features/auth/authSession';
 import { StoreManagerLayout } from '@/shared/layouts/StoreManagerLayout';
 import { StoreManagerRouteGuard } from '@/shared/routes/StoreManagerRouteGuard';
 import { DashboardPage } from '@/pages/store-manager/DashboardPage';
@@ -53,6 +55,11 @@ const dispatcherPaths: Partial<Record<DispatcherRoute, string>> = {
   'live-tracking': '/dispatcher/tracking', fleet: '/dispatcher/fleet', reports: '/dispatcher/reports',
 };
 
+const FullPageRedirect: React.FC<{ to: string }> = ({ to }) => {
+  useEffect(() => window.location.replace(to), [to]);
+  return null;
+};
+
 export const App: React.FC = () => {
   const isDispatcherPath = window.location.pathname.startsWith('/dispatcher');
   const initial = routeFromPath(window.location.pathname);
@@ -62,12 +69,13 @@ export const App: React.FC = () => {
   const [planningSelectedOrders, setPlanningSelectedOrders] = useState<QueueOrder[]>([]);
   const [selectedTrackingTripId, setSelectedTrackingTripId] = useState(initial.route === 'live-trip-detail' || initial.route === 'live-trip-map' ? initial.id ?? '' : 'TRIP-0925-014');
   const [currentUser, setCurrentUser] = useState<{ email: string; role?: string } | null>(() => {
+    const storedSession = localStorage.getItem('waypoint_auth_session');
+    if (storedSession) {
+      try { return JSON.parse(storedSession).user; } catch { return null; }
+    }
     const storedUser = localStorage.getItem('waypoint_loader_session');
     if (storedUser) {
       try { return JSON.parse(storedUser); } catch { return null; }
-    }
-    if (window.location.hash === '#loading' || window.location.hash === '#portal') {
-      return { email: 'kumar.s@waypoint.com', role: 'LOADER' };
     }
     return null;
   });
@@ -92,25 +100,11 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', onPopState);
   }, [isDispatcherPath]);
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      if (window.location.hash === '#login') {
-        setCurrentUser(null);
-        localStorage.removeItem('waypoint_loader_session');
-      } else if (window.location.hash === '#loading' || window.location.hash === '#portal') {
-        const user = { email: 'kumar.s@waypoint.com', role: 'LOADER' };
-        setCurrentUser(user);
-        localStorage.setItem('waypoint_loader_session', JSON.stringify(user));
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('waypoint_loader_session');
-    window.location.hash = '#login';
+    authSession.clear();
+    window.location.assign('/login');
   };
 
   const handleGlobalNavigate = (target: string) => {
@@ -142,9 +136,19 @@ export const App: React.FC = () => {
     navigate('planning', dispatcherPaths.planning!);
   };
 
-  if (currentUser) return <LoadingPortalPage onLogout={handleLogout} />;
+  if (currentUser?.role === 'DRIVER') {
+    return <DriverPortalPage currentUser={currentUser} onLogout={handleLogout} />;
+  }
+
+  if (currentUser?.role === 'LOADER') {
+    return <LoadingPortalPage onLogout={handleLogout} />;
+  }
 
   if (isDispatcherPath) {
+    if (!currentUser) return <FullPageRedirect to="/login" />;
+    if (currentUser.role !== 'DISPATCHER' && currentUser.role !== 'ADMIN') {
+      return <FullPageRedirect to={currentUser.role === 'STORE_MANAGER' ? '/store-manager' : '/login'} />;
+    }
     switch (dispatcherRoute) {
       case 'dashboard': return <DispatcherDashboardPage onNavigateGlobal={handleGlobalNavigate} />;
       case 'orders': return <OrdersQueuePage onNavigateGlobal={handleGlobalNavigate} onViewOrderDetails={handleViewOrderDetails} onPlanOrders={handlePlanOrders} />;
@@ -164,7 +168,7 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Navigate replace to="/store-manager" />} path="/" />
+        <Route element={<Navigate replace to={currentUser?.role === 'STORE_MANAGER' ? '/store-manager' : '/login'} />} path="/" />
         <Route element={<LoginPage />} path="/login" />
         <Route element={<StoreManagerRouteGuard />} path="/store-manager">
           <Route element={<StoreManagerLayout />}>
@@ -179,7 +183,7 @@ export const App: React.FC = () => {
             <Route element={<ReceivingPage />} path="receiving" />
           </Route>
         </Route>
-        <Route element={<Navigate replace to="/store-manager" />} path="*" />
+        <Route element={<Navigate replace to="/login" />} path="*" />
       </Routes>
     </BrowserRouter>
   );

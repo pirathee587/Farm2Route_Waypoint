@@ -120,7 +120,16 @@ func (r *AllocationRepository) applyTrip(ctx context.Context, tx pgx.Tx, event m
 
 	// Move every historical and active sequence out of the target range first.
 	// Staging only active rows can collide with a stop removed by an earlier revision.
-	if _, err = tx.Exec(ctx, `UPDATE public.load_stops SET removed_from_plan=TRUE,stop_no=1000000+stop_no,load_order=1000000+load_order,updated_at=NOW() WHERE trip_id=$1`, tripID); err != nil {
+	if _, err = tx.Exec(ctx, `
+		WITH staged AS (
+			SELECT stop_id,ROW_NUMBER() OVER (ORDER BY stop_id)::INT AS rn
+			FROM public.load_stops WHERE trip_id=$1
+		)
+		UPDATE public.load_stops s
+		SET removed_from_plan=TRUE,stop_no=2000000+staged.rn,
+			load_order=2000000+staged.rn,updated_at=NOW()
+		FROM staged WHERE s.stop_id=staged.stop_id
+	`, tripID); err != nil {
 		return err
 	}
 

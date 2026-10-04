@@ -6,6 +6,7 @@ import {
   GeoJSONLineString,
 } from './types';
 import { calculateDistanceMeters, roundCoordinate } from '../lib/geo';
+import { authSession } from '@/features/auth/authSession';
 
 const ROUTE_CACHE_PREFIX = 'waypoint_route_cache_';
 const TODAY_CACHE_KEY = 'waypoint_driver_today_cache';
@@ -48,9 +49,9 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    const token = localStorage.getItem('waypoint_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    const session = authSession.get();
+    if (session?.accessToken) {
+      headers['Authorization'] = `Bearer ${session.accessToken}`;
     }
     return headers;
   }, []);
