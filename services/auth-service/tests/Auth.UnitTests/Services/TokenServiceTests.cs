@@ -44,6 +44,25 @@ public class TokenServiceTests
         Assert.Equal("test-issuer", jwtToken.Issuer);
         Assert.Contains(jwtToken.Claims, c => c.Type == JwtRegisteredClaimNames.Email && c.Value == "test@waypoint.lk");
         Assert.Contains(jwtToken.Claims, c => c.Type == "role" && c.Value == "DISPATCHER");
+        Assert.DoesNotContain(jwtToken.Claims, c => c.Type == "outlet_id");
+    }
+
+    [Fact]
+    public void GenerateAccessToken_StoreManagerIncludesOutletClaim()
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(), Email = "manager@waypoint.lk", PasswordHash = "hashed",
+            Role = UserRole.STORE_MANAGER,
+            StoreManagerProfile = new StoreManagerProfile
+            {
+                FullName = "Manager", OutletId = "OUT001", EmployeeId = "SM001"
+            }
+        };
+
+        var jwtToken = new JwtSecurityTokenHandler().ReadJwtToken(_tokenService.GenerateAccessToken(user));
+
+        Assert.Contains(jwtToken.Claims, c => c.Type == "outlet_id" && c.Value == "OUT001");
     }
 
     [Fact]

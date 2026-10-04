@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
 import { authSession } from '@/features/auth/authSession';
@@ -21,8 +22,7 @@ export const LoginPage: React.FC = () => {
   }, []);
 
   const handleLoginSuccess = (user: AuthUser) => {
-    const sessionUser = authSession.get()?.user || user;
-    if (sessionUser?.role === 'STORE_MANAGER') {
+    if (user?.role === 'STORE_MANAGER') {
       navigate('/store-manager');
       return;
     }
@@ -38,7 +38,7 @@ export const LoginPage: React.FC = () => {
       window.location.assign('/dispatcher/dashboard');
       return;
     }
-    setLoggedInUser({ email: sessionUser.email, role: sessionUser.role ?? 'User' });
+    setLoggedInUser({ email: user.email, role: user.role });
   };
 
   return (
