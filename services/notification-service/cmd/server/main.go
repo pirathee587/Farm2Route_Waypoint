@@ -53,9 +53,26 @@ func main() {
 	// ── Config ───────────────────────────────────────────────────────────────
 	cfg, err := config.Load(*configPathFlag)
 	if err != nil {
-		logger.Warn("Could not load config file; using defaults", "error", err)
+		cfg, err = config.Load("/config/config.yaml")
+	}
+	if err != nil {
+		logger.Warn("Could not load config file; using defaults with env", "error", err)
 		cfg = &config.Config{
 			Server: config.ServerConfig{HTTPPort: ":8080", WSPath: "/ws"},
+			Database: config.DatabaseConfig{
+				Host:         os.Getenv("SUPABASE_DB_HOST"),
+				Port:         os.Getenv("SUPABASE_DB_PORT"),
+				Name:         os.Getenv("SUPABASE_DB_NAME"),
+				User:         os.Getenv("SUPABASE_DB_USER"),
+				Password:     os.Getenv("SUPABASE_DB_PASSWORD"),
+				SSLMode:      "require",
+				MaxOpenConns: 10,
+				MaxIdleConns: 2,
+			},
+			RabbitMQ: config.RabbitMQConfig{
+				URL:      os.Getenv("RABBITMQ_URL"),
+				Exchange: "waypoint.events",
+			},
 		}
 	}
 

@@ -163,11 +163,6 @@ func (r *NotificationRepository) ListForUser(
 // MarkRead marks the specified notification IDs as read for userID.
 // When ids is empty, all unread notifications for the user are marked read.
 func (r *NotificationRepository) MarkRead(ctx context.Context, userID string, ids []string) (int, error) {
-	var (
-		tag pgxpool.Row
-		err error
-	)
-
 	if len(ids) == 0 {
 		// Mark all unread for this user
 		result, execErr := r.pool.Exec(ctx, `
@@ -180,9 +175,6 @@ func (r *NotificationRepository) MarkRead(ctx context.Context, userID string, id
 		}
 		return int(result.RowsAffected()), nil
 	}
-
-	_ = tag
-	_ = err
 
 	result, execErr := r.pool.Exec(ctx, `
 		UPDATE public.notifications

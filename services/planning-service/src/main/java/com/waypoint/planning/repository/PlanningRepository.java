@@ -84,4 +84,29 @@ public class PlanningRepository {
     return Map.of("order_id",d.orderId(),"outlet_id",d.outletId(),"store_manager_user_id",manager,"reason",d.reason(),"new_expected_date",d.newExpectedDate());
   }
   public Map<String,Object> trip(UUID id){return jdbc.queryForMap("SELECT trip_id,vehicle_id,driver_id,trip_number,delivery_date,status::text,stop_sequence,total_weight_kg,total_volume_m3 FROM public.trips WHERE trip_id=?",id);}
+  @Transactional public Map<String,Object> removeStop(UUID tripId,UUID stopId,String actor){
+    Map<String,Object> stop=jdbc.queryForMap("SELECT stop_no,outlet_id,outlet_name,removed_from_plan,COALESCE(delivery_status,'') delivery_status FROM public.load_stops WHERE trip_id=? AND stop_id=? FOR UPDATE",tripId,stopId);
+    if(Boolean.TRUE.equals(stop.get("removed_from_plan")))return Map.of("trip_id",tripId,"stop_id",stopId,"status","ALREADY_REMOVED");
+    String ds = Objects.toString(stop.get("delivery_status"), "");
+    if("DELIVERED".equalsIgnoreCase(ds) || "PARTIAL".equalsIgnoreCase(ds) || "NOT_DELIVERED".equalsIgnoreCase(ds)){
+      throw new ConflictException("STOP_ALREADY_COMPLETED", "Stop is already completed with outcome " + ds);
+    }
+    var outcomes = jdbc.queryForList("SELECT outcome::text FROM public.delivery_records WHERE trip_id=? AND stop_id=? LIMIT 1", String.class, tripId, stopId);
+    if(!outcomes.isEmpty()){
+      throw new ConflictException("STOP_ALREADY_COMPLETED", "Stop is already completed with outcome " + outcomes.getFirst());
+    }
+    int before=jdbc.queryForObject("SELECT COUNT(*) FROM public.load_stops WHERE trip_id=? AND removed_from_plan=FALSE",Integer.class,tripId);
+    UUID eventId=UUID.randomUUID();Instant occurred=Instant.now();
+    jdbc.update("UPDATE public.load_stops SET removed_from_plan=TRUE,updated_at=? WHERE trip_id=? AND stop_id=?",Timestamp.from(occurred),tripId,stopId);
+    jdbc.update("UPDATE public.trips SET stop_sequence=array_remove(stop_sequence,?),updated_at=? WHERE trip_id=?",stop.get("outlet_id"),Timestamp.from(occurred),tripId);
+    jdbc.update("INSERT INTO public.route_change_log(id,trip_id,stop_id,type,actor,occurred_at) VALUES(?,?,?,'STOP_REMOVED',?,?) ON CONFLICT(id) DO NOTHING",eventId,tripId,stopId,actor,Timestamp.from(occurred));
+    Map<String,Object> payload=new LinkedHashMap<>();payload.put("event_id",eventId);payload.put("trip_id",tripId);payload.put("removed_stop_id",stopId);payload.put("actor",actor);payload.put("occurred_at",occurred);payload.put("before_count",before);payload.put("after_count",before-1);
+    insertOutbox("ROUTE_UPDATED","route.updated",tripId.toString(),payload);
+    return Map.of("trip_id",tripId,"stop_id",stopId,"outlet_id",stop.get("outlet_id"),"status","REMOVED","before_count",before,"after_count",before-1,"event_id",eventId);
+  }
+  public static class ConflictException extends RuntimeException {
+    private final String code;
+    public ConflictException(String code, String message){ super(message); this.code = code; }
+    public String getCode(){ return code; }
+  }
 }

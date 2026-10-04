@@ -16,4 +16,5 @@ public class PlanningService {
   public List<DeferralHistory> deferrals(String outlet){return repo.deferrals(outlet);}
   public List<ProgressRow> progress(LocalDate date){return repo.progress(date);}
   public Map<String,Object> trip(UUID id){return repo.trip(id);}
+  public Map<String,Object> removeStop(UUID tripId,UUID stopId,String actor){return repo.removeStop(tripId,stopId,actor);}
 }

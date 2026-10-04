@@ -45,6 +45,9 @@ export const authApi = {
       }
 
       const data = await response.json();
+      if (data.accessToken) {
+        localStorage.setItem('waypoint_token', data.accessToken);
+      }
       if (credentials.rememberMe) {
         localStorage.setItem('waypoint_remember_email', credentials.email);
       } else {
@@ -65,14 +68,40 @@ export const authApi = {
         };
       }
 
+      const emailLower = (credentials.email || '').toLowerCase().trim();
+      const isDriver = emailLower.includes('driver') || emailLower.startsWith('drv') || emailLower === 'kumar.s@waypoint.com';
+      const isLoader = emailLower.includes('loader') || emailLower.startsWith('ldr');
+      const isDispatcher = emailLower.includes('dispatcher');
+      const isManager = emailLower.includes('manager');
+
+      const role: 'LOADER' | 'DISPATCHER' | 'DRIVER' | 'STORE_MANAGER' | 'ADMIN' = isDriver
+        ? 'DRIVER'
+        : isLoader
+        ? 'LOADER'
+        : isDispatcher
+        ? 'DISPATCHER'
+        : isManager
+        ? 'STORE_MANAGER'
+        : 'DRIVER';
+
+      const fullName = isDriver
+        ? 'Kumar (Driver)'
+        : isLoader
+        ? 'Kumar S. (Loader)'
+        : isDispatcher
+        ? 'Kasun Perera'
+        : isManager
+        ? 'Kavishanth Silva'
+        : 'Authenticated User';
+
       return {
         success: true,
         accessToken: 'mock-jwt-token-waypoint',
         user: {
-          id: 'user-001',
+          id: isDriver ? 'drv-014' : 'user-001',
           email: credentials.email,
-          role: 'LOADER',
-          fullName: 'S. Perera',
+          role,
+          fullName,
         },
       };
     }

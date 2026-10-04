@@ -1,2 +1,0 @@
-﻿# Exception
-Global exception handler.

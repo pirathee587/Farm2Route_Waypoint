@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Check, ArrowLeft } from 'lucide-react';
 import { WaypointDesktopLogo } from '@/shared/components/Logos';
 import { DesktopRightPanel } from './AuthIllustration';
-import { authApi, LoginCredentials } from './authApi';
+import { authApi, LoginCredentials, AuthUser } from './authApi';
 
 export type AuthScreen = 'login' | 'forgot-password' | 'check-email';
 
 interface DesktopAuthViewProps {
   screen: AuthScreen;
   setScreen: (screen: AuthScreen) => void;
-  onLoginSuccess?: (email: string) => void;
+  onLoginSuccess?: (user: AuthUser) => void;
 }
 
 export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
@@ -38,8 +38,8 @@ export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
     const res = await authApi.login({ email, password, rememberMe });
     setIsSubmitting(false);
 
-    if (res.success) {
-      if (onLoginSuccess) onLoginSuccess(email);
+    if (res.success && res.user) {
+      if (onLoginSuccess) onLoginSuccess(res.user);
     } else {
       setLoginError(res.errorMessage || 'Incorrect email or password');
     }
@@ -385,31 +385,57 @@ export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
                     gap: '8px',
                   }}
                 >
-                  <div>
-                    This portal is for Loader accounts. Dispatcher/Driver/Store Manager use their own login link.
+                  <div style={{ fontWeight: 600, color: '#334155' }}>
+                    Sign in with your role-based credentials:
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('kumar.s@waypoint.com');
-                      setPassword('loader123');
-                    }}
-                    style={{
-                      alignSelf: 'flex-start',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      backgroundColor: '#FEF3C7',
-                      color: '#92400E',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: '1px solid #FDE68A',
-                    }}
-                  >
-                    <span>⚡ Quick Fill: kumar.s@waypoint.com</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail('drv014@waypoint.lk');
+                        setPassword('Waypoint@2026');
+                      }}
+                      style={{
+                        alignSelf: 'flex-start',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        border: '1px solid #FDE68A',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>🚚 Driver Quick Fill: drv014@waypoint.lk</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail('loader@waypoint.lk');
+                        setPassword('Waypoint@2026');
+                      }}
+                      style={{
+                        alignSelf: 'flex-start',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#334155',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        border: '1px solid #CBD5E1',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>📦 Loader Quick Fill: loader@waypoint.lk</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

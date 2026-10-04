@@ -58,12 +58,37 @@ func main() {
 	// ── Config Loading ───────────────────────────────────────────────────────
 	cfg, err := config.Load(*configPathFlag)
 	if err != nil {
-		logger.Warn("Could not load config file, falling back to defaults", "error", err)
+		cfg, err = config.Load("/config/config.yaml")
+	}
+	if err != nil {
+		logger.Warn("Could not load config file, falling back to environment variables", "error", err)
 		cfg = &config.Config{
 			Server: config.ServerConfig{
 				HTTPPort: ":8080",
 				GRPCPort: ":9090",
-				Env:      "development",
+				Env:      os.Getenv("APP_ENV"),
+			},
+			Database: config.DatabaseConfig{
+				Host:         os.Getenv("SUPABASE_DB_HOST"),
+				Port:         os.Getenv("SUPABASE_DB_PORT"),
+				Name:         os.Getenv("SUPABASE_DB_NAME"),
+				User:         os.Getenv("SUPABASE_DB_USER"),
+				Password:     os.Getenv("SUPABASE_DB_PASSWORD"),
+				SSLMode:      "require",
+				MaxOpenConns: 10,
+				MaxIdleConns: 2,
+			},
+			RabbitMQ: config.RabbitMQConfig{
+				URL:      os.Getenv("RABBITMQ_URL"),
+				Exchange: "waypoint.events",
+			},
+			JWT: config.JWTConfig{
+				Secret: os.Getenv("JWT_SECRET"),
+				Issuer: os.Getenv("JWT_ISSUER"),
+			},
+			Supabase: config.SupabaseConfig{
+				URL:            os.Getenv("SUPABASE_URL"),
+				ServiceRoleKey: os.Getenv("SUPABASE_SERVICE_ROLE_KEY"),
 			},
 		}
 	}
@@ -85,12 +110,24 @@ func main() {
 	var loaderRepo *repository.LoaderRepository
 	var departureRepo *repository.DepartureRepository
 	var allocationRepo *repository.AllocationRepository
+	var driverRepo *repository.DriverRepository
+	var routeRepo *repository.RouteRepository
+	var profileRepo *repository.ProfileRepository
+	var notificationRepo *repository.DriverNotificationRepository
+	var syncRepo *repository.SyncRepository
+	var tripSummaryRepo *repository.TripSummaryRepository
 
 	if pgDB != nil && pgDB.Pool != nil {
 		loadingRepo = repository.NewLoadingRepository(pgDB.Pool)
 		loaderRepo = repository.NewLoaderRepository(pgDB.Pool)
 		departureRepo = repository.NewDepartureRepository(pgDB.Pool)
 		allocationRepo = repository.NewAllocationRepository(pgDB.Pool)
+		driverRepo = repository.NewDriverRepository(pgDB.Pool)
+		routeRepo = repository.NewRouteRepository(pgDB.Pool)
+		profileRepo = repository.NewProfileRepository(pgDB.Pool)
+		notificationRepo = repository.NewDriverNotificationRepository(pgDB.Pool)
+		syncRepo = repository.NewSyncRepository(pgDB.Pool)
+		tripSummaryRepo = repository.NewTripSummaryRepository(pgDB.Pool)
 		logger.Info("Repositories initialized", "loading_repo", loadingRepo != nil, "loader_repo", loaderRepo != nil, "departure_repo", departureRepo != nil)
 	}
 
@@ -102,6 +139,13 @@ func main() {
 	departureService := service.NewDepartureService(departureRepo, loaderRepo, logger)
 	loaderHandler := handler.NewLoaderHandler(loadingService, storageService, cfg.DemoMode)
 	departureHandler := handler.NewDepartureHandler(departureService)
+	driverService := service.NewDriverService(driverRepo)
+	driverHandler := handler.NewDriverHandler(driverService, storageService)
+	driverHandler.SetRouteService(service.NewRouteService(routeRepo, os.Getenv("MAPBOX_ACCESS_TOKEN")))
+	profileHandler := handler.NewProfileHandler(service.NewProfileService(profileRepo))
+	notificationHandler := handler.NewDriverNotificationHandler(service.NewDriverNotificationService(notificationRepo))
+	syncHandler := handler.NewSyncHandler(service.NewSyncService(syncRepo, driverService), storageService)
+	tripSummaryHandler := handler.NewTripSummaryHandler(service.NewTripSummaryService(tripSummaryRepo))
 
 	// ── Background Outbox Worker ─────────────────────────────────────────────
 	if pgDB != nil && pgDB.Pool != nil {
@@ -120,6 +164,14 @@ func main() {
 		allocationConsumer := service.NewAllocationConsumer(allocationRepo, amqpURL, cfg.RabbitMQ.Exchange, logger)
 		allocationConsumer.Start()
 		defer allocationConsumer.Stop()
+
+		arrivalWorker := service.NewArrivalWorker(pgDB.Pool, logger)
+		arrivalWorker.Start()
+		defer arrivalWorker.Stop()
+
+		driverNotificationConsumer := service.NewDriverNotificationConsumer(notificationRepo, amqpURL, cfg.RabbitMQ.Exchange, logger)
+		driverNotificationConsumer.Start()
+		defer driverNotificationConsumer.Stop()
 	}
 
 	// ── Routing Setup ────────────────────────────────────────────────────────
@@ -154,6 +206,38 @@ func main() {
 		middleware.RequireLoaderOrDispatcher(loaderMux),
 	)
 	mux.Handle("/api/loading/", loaderProtected)
+
+	// 3. Driver Today routes (/api/delivery/driver/**)
+	driverMux := http.NewServeMux()
+	driverMux.HandleFunc("GET /api/delivery/driver/today", driverHandler.GetToday)
+	driverMux.HandleFunc("GET /api/delivery/driver/trips/{tripId}/stops", driverHandler.GetTripStops)
+	driverMux.HandleFunc("GET /api/delivery/driver/dispatcher-contact", driverHandler.GetDispatcherContact)
+	driverMux.HandleFunc("GET /api/delivery/driver/stops/{stopId}", driverHandler.GetStopDetail)
+	driverMux.HandleFunc("POST /api/delivery/driver/stops/{stopId}/arrive", driverHandler.Arrive)
+	driverMux.HandleFunc("GET /api/delivery/driver/stops/{stopId}/window-status", driverHandler.GetWindowStatus)
+	driverMux.HandleFunc("GET /api/delivery/driver/cant-deliver/reasons", driverHandler.GetCantDeliverReasons)
+	driverMux.HandleFunc("POST /api/delivery/driver/stops/{stopId}/cant-deliver", driverHandler.CantDeliver)
+	driverMux.HandleFunc("GET /api/delivery/driver/stops/{stopId}/pod", driverHandler.GetPOD)
+	driverMux.HandleFunc("POST /api/delivery/driver/stops/{stopId}/pod/signature", driverHandler.UploadSignature)
+	driverMux.HandleFunc("POST /api/delivery/driver/stops/{stopId}/pod/photo", driverHandler.UploadPhoto)
+	driverMux.HandleFunc("POST /api/delivery/driver/stops/{stopId}/confirm", driverHandler.ConfirmDelivery)
+	driverMux.HandleFunc("GET /api/delivery/driver/trips/{tripId}/route", driverHandler.GetRoute)
+	driverMux.HandleFunc("GET /api/delivery/driver/trips/{tripId}/route/geometry", driverHandler.GetRouteGeometry)
+	driverMux.HandleFunc("GET /api/delivery/driver/profile", profileHandler.GetProfile)
+	driverMux.HandleFunc("POST /api/delivery/driver/heartbeat", profileHandler.Heartbeat)
+	driverMux.HandleFunc("GET /api/delivery/driver/history", profileHandler.History)
+	driverMux.HandleFunc("GET /api/delivery/driver/notifications", notificationHandler.Today)
+	driverMux.HandleFunc("POST /api/delivery/driver/notifications/{id}/review", notificationHandler.Review)
+	driverMux.HandleFunc("POST /api/delivery/driver/notifications/read-all", notificationHandler.ReadAll)
+	driverMux.HandleFunc("GET /api/delivery/driver/notifications/history", notificationHandler.History)
+	driverMux.HandleFunc("POST /api/delivery/driver/sync", syncHandler.Sync)
+	driverMux.HandleFunc("POST /api/delivery/driver/sync/verify", syncHandler.Verify)
+	driverMux.HandleFunc("GET /api/delivery/driver/sync/conflicts", syncHandler.Conflicts)
+	driverMux.HandleFunc("POST /api/delivery/driver/sync/media/{client_action_id}", syncHandler.Media)
+	driverMux.HandleFunc("GET /api/delivery/driver/trips/{tripId}/summary", tripSummaryHandler.Summary)
+	driverMux.HandleFunc("GET /api/delivery/driver/trips/{tripId}/outcomes", tripSummaryHandler.Outcomes)
+	driverMux.HandleFunc("POST /api/delivery/driver/trips/{tripId}/complete", tripSummaryHandler.Complete)
+	mux.Handle("/api/delivery/driver/", middleware.GatewayAuthMiddleware(middleware.RequireDriver(driverMux)))
 
 	// Wrap root with request logger
 	rootHandler := middleware.RequestLogger(logger)(mux)

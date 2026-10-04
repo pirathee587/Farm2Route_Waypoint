@@ -51,6 +51,8 @@ services:
       - ./services/auth-service/.env
     expose:
       - "8080"
+    ports:
+      - "8081:8080"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -77,6 +79,8 @@ services:
       - ./services/api-gateway/.env
     expose:
       - "8080"
+    ports:
+      - "8080:8080"
     depends_on:
       auth-service:
         condition: service_healthy
@@ -112,6 +116,8 @@ services:
     expose:
       - "8080"
       - "9090"
+    ports:
+      - "8082:8080"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -165,14 +171,20 @@ services:
     restart: unless-stopped
     env_file:
       - ./services/loading-delivery-service/.env
+    environment:
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
     expose:
       - "8080"
       - "9090"
+    ports:
+      - "8084:8080"
+    volumes:
+      - loading_uploads:/uploads
     depends_on:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      test: ["CMD", "/server", "-healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -194,11 +206,13 @@ services:
       - ./services/notification-service/.env
     expose:
       - "8080"
+    ports:
+      - "8085:8080"
     depends_on:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      test: ["CMD", "/server", "-healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -226,7 +240,7 @@ services:
       api-gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- --no-check-certificate https://localhost/nginx-health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -241,6 +255,8 @@ services:
 volumes:
   rabbitmq_data:
     name: waypoint_rabbitmq_data
+  loading_uploads:
+    name: waypoint_loading_uploads
 
 # ══════════════════════════════════════════════════════════════════════════
 #  NETWORKS

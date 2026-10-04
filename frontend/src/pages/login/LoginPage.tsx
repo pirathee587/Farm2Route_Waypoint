@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
+import { AuthUser } from '@/features/auth/authApi';
 
 interface LoginPageProps {
-  onLoginSuccess?: (email: string) => void;
+  onLoginSuccess?: (user: AuthUser) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
@@ -18,9 +19,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleLoginSuccess = (email: string) => {
+  const handleLoginSuccess = (user: AuthUser) => {
     if (onLoginSuccess) {
-      onLoginSuccess(email);
+      onLoginSuccess(user);
     }
   };
 

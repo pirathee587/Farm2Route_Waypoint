@@ -32,6 +32,8 @@ spring:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 0
+    validate-on-migrate: false
+    table: ${SPRING_FLYWAY_TABLE:flyway_planning_history}
     locations: classpath:db/migration
 
   # ── RabbitMQ ─────────────────────────────────────────────────────────────
