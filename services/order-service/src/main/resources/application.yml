@@ -2,7 +2,6 @@ spring:
   application:
     name: order-service
 
-  # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
   datasource:
     url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require
     username: ${SUPABASE_DB_USER}
@@ -17,7 +16,12 @@ spring:
       max-lifetime: 1200000
       connection-test-query: SELECT 1
 
-  # ── JPA ──────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    table: flyway_order_history
+
   jpa:
     hibernate:
       ddl-auto: none
@@ -26,9 +30,9 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         default_schema: public
+        format_sql: true
     open-in-view: false
 
-  # ── RabbitMQ ─────────────────────────────────────────────────────────────
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
@@ -39,13 +43,16 @@ spring:
       simple:
         acknowledge-mode: manual
         prefetch: 10
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          multiplier: 2.0
 
-# ── Server ───────────────────────────────────────────────────────────────
 server:
-  port: ${SERVER_PORT:8080}
+  port: 8080
   shutdown: graceful
 
-# ── Actuator ────────────────────────────────────────────────────────────
 management:
   endpoints:
     web:
@@ -55,29 +62,58 @@ management:
     health:
       show-details: always
 
-# ── gRPC (Planning Service connection) ───────────────────────────────────
 grpc:
+  server:
+    port: 9090
+    security:
+      enabled: ${GRPC_TLS_ENABLED:false}
+      certificateChain: ${GRPC_TLS_CERTIFICATE_CHAIN:}
+      privateKey: ${GRPC_TLS_PRIVATE_KEY:}
+      trustCertCollection: ${GRPC_TLS_TRUST_CERT_COLLECTION:}
+      clientAuth: ${GRPC_TLS_CLIENT_AUTH:REQUIRE}
+  client:
+    planning-service:
+      address: static://${PLANNING_SERVICE_GRPC_HOST:planning-service}:${PLANNING_SERVICE_GRPC_PORT:9090}
+      negotiationType: plaintext
   planning-service:
     host: ${PLANNING_SERVICE_GRPC_HOST:planning-service}
     port: ${PLANNING_SERVICE_GRPC_PORT:9090}
 
-# ── CSV Seed Data ─────────────────────────────────────────────────────────
 waypoint:
+  timezone: Asia/Colombo
+  cutoff: "16:00"
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+    poll-ms: ${OUTBOX_POLL_MS:500}
   seed:
     data-path: ${SEED_DATA_PATH:/app/data}
     enabled: true
-  cutoff:
-    hour: 16       # 4PM cutoff for same-day orders
-    minute: 0
   rabbitmq:
     exchange: waypoint.events
     queues:
       order-placed: order.placed
       allocation-completed: allocation.completed
+      order-deferred: order-service.order-deferred
+      delivery-completed: order-service.delivery-completed
     routing-keys:
       order-placed: order.placed
+      allocation-completed: allocation.completed
+      order-deferred: order.deferred
+      delivery-completed: delivery.completed
 
-# ── Logging ──────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.waypoint: INFO
+    org.springframework.amqp: WARN
+    org.hibernate.SQL: WARN
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  jpa:
+    show-sql: false
 logging:
   level:
     com.waypoint: INFO

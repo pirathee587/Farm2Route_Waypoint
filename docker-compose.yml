@@ -138,9 +138,9 @@ services:
       - ./services/order-service/.env
     volumes:
       - ./services/order-service/src/main/resources/data:/app/data:ro
-    expose:
-      - "8080"
-      - "9090"
+    ports:
+      - "5003:8080"
+      - "9090:9090"
     depends_on:
       rabbitmq:
         condition: service_healthy

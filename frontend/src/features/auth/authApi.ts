@@ -1,3 +1,5 @@
+import { authSession } from './authSession';
+
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -23,6 +25,16 @@ export interface ResetPasswordResult {
   message?: string;
   errorMessage?: string;
 }
+
+const persistSession = (result: LoginResult): LoginResult => {
+  if (result.success && result.user && result.accessToken) {
+    authSession.set({
+      accessToken: result.accessToken,
+      user: result.user,
+    });
+  }
+  return result;
+};
 
 export const authApi = {
   async login(credentials: LoginCredentials): Promise<LoginResult> {
@@ -51,11 +63,11 @@ export const authApi = {
         localStorage.removeItem('waypoint_remember_email');
       }
 
-      return {
+      return persistSession({
         success: true,
         accessToken: data.accessToken,
         user: data.user,
-      };
+      });
     } catch {
       // Fallback for standalone demo when backend server is offline
       if (credentials.password === 'wrong' || credentials.password === 'error') {
@@ -65,7 +77,7 @@ export const authApi = {
         };
       }
 
-      return {
+      return persistSession({
         success: true,
         accessToken: 'mock-jwt-token-waypoint',
         user: {
@@ -74,7 +86,7 @@ export const authApi = {
           role: 'LOADER',
           fullName: 'S. Perera',
         },
-      };
+      });
     }
   },
 

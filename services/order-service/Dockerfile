@@ -1,4 +1,37 @@
-# ═══════════════════════════════════════════════════════════════════════════
+# Order Service - Multi-stage Dockerfile
+# Maven build (Java 21) -> Eclipse Temurin JRE 21 minimal runtime
+
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+
+COPY pom.xml .
+RUN mvn dependency:go-offline -B --no-transfer-progress
+
+COPY src ./src
+RUN mvn package -DskipTests -B --no-transfer-progress
+
+FROM eclipse-temurin:21-jre-alpine AS runtime
+WORKDIR /app
+
+RUN apk add --no-cache curl
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+COPY --from=build /app/target/order-service-*.jar app.jar
+COPY src/main/resources/data /app/data
+
+EXPOSE 8080
+EXPOSE 9090
+
+USER appuser
+
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+ENV SPRING_PROFILES_ACTIVE=docker
+ENV SEED_DATA_PATH=/app/data
+
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=5 \
+  CMD curl -fs http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]# ═══════════════════════════════════════════════════════════════════════════
 #  Order Service — Multi-stage Dockerfile
 #  Maven build (Java 21) → Eclipse Temurin JRE 21 minimal runtime
 # ═══════════════════════════════════════════════════════════════════════════
