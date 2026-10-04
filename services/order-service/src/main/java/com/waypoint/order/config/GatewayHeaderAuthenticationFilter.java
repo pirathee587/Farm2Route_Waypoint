@@ -21,6 +21,8 @@ public final class GatewayHeaderAuthenticationFilter extends OncePerRequestFilte
     private static final String USER_ID_HEADER = "X-User-Id";
     private static final String USER_ROLE_HEADER = "X-User-Role";
     private static final String USER_EMAIL_HEADER = "X-User-Email";
+    private static final String OUTLET_ID_HEADER = "X-Outlet-Id";
+    private static final String GATEWAY_VERIFIED_HEADER = "X-Gateway-Verified";
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -36,13 +38,16 @@ public final class GatewayHeaderAuthenticationFilter extends OncePerRequestFilte
         String userId = request.getHeader(USER_ID_HEADER);
         String role = request.getHeader(USER_ROLE_HEADER);
         String email = request.getHeader(USER_EMAIL_HEADER);
+        String outletId = "true".equalsIgnoreCase(request.getHeader(GATEWAY_VERIFIED_HEADER))
+            ? request.getHeader(OUTLET_ID_HEADER)
+            : null;
 
         if (isBlank(userId) || isBlank(role) || isBlank(email)) {
             writeUnauthorized(response);
             return;
         }
 
-        var principal = new GatewayUserPrincipal(userId, email);
+        var principal = new GatewayUserPrincipal(userId, email, outletId);
         var authority = new SimpleGrantedAuthority("ROLE_" + role.trim().toUpperCase());
         var authentication = UsernamePasswordAuthenticationToken.authenticated(
             principal, null, List.of(authority));
@@ -62,6 +67,6 @@ public final class GatewayHeaderAuthenticationFilter extends OncePerRequestFilte
             "{\"error\":\"Unauthorized\",\"message\":\"Trusted gateway identity headers are required.\"}");
     }
 
-    public record GatewayUserPrincipal(String userId, String email) {
+    public record GatewayUserPrincipal(String userId, String email, String outletId) {
     }
 }

@@ -32,7 +32,7 @@ class GatewayHeaderAuthenticationFilterTest {
         assertThat(authentication.isAuthenticated()).isTrue();
         assertThat(authentication.getPrincipal())
             .isEqualTo(new GatewayHeaderAuthenticationFilter.GatewayUserPrincipal(
-                "user-123", "manager@example.com"));
+                "user-123", "manager@example.com", "OUT001"));
         assertThat(authentication.getAuthorities())
             .extracting(Object::toString)
             .containsExactly("ROLE_STORE_MANAGER");
@@ -66,6 +66,24 @@ class GatewayHeaderAuthenticationFilterTest {
         request.addHeader("X-User-Id", "user-123");
         request.addHeader("X-User-Role", "STORE_MANAGER");
         request.addHeader("X-User-Email", "manager@example.com");
+        request.addHeader("X-Gateway-Verified", "true");
+        request.addHeader("X-Outlet-Id", "OUT001");
         return request;
+    }
+
+    @Test
+    void ignoresOutletHeaderWithoutTrustedGatewayMarker() throws Exception {
+        var request = requestWithHeaders();
+        request.removeHeader("X-Gateway-Verified");
+        var response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(authentication).isNotNull();
+        assertThat(authentication.getPrincipal())
+            .isEqualTo(new GatewayHeaderAuthenticationFilter.GatewayUserPrincipal(
+                "user-123", "manager@example.com", null));
     }
 }
