@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Check, ArrowLeft } from 'lucide-react';
 import { WaypointDesktopLogo } from '@/shared/components/Logos';
 import { DesktopRightPanel } from './AuthIllustration';
-import { authApi, LoginCredentials, AuthUser } from './authApi';
+import { authApi, LoginCredentials } from './authApi';
 
 export type AuthScreen = 'login' | 'forgot-password' | 'check-email';
 
 interface DesktopAuthViewProps {
   screen: AuthScreen;
   setScreen: (screen: AuthScreen) => void;
-  onLoginSuccess?: (user: AuthUser) => void;
+  onLoginSuccess?: (email: string) => void;
 }
 
 export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
@@ -38,8 +38,8 @@ export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
     const res = await authApi.login({ email, password, rememberMe });
     setIsSubmitting(false);
 
-    if (res.success && res.user) {
-      if (onLoginSuccess) onLoginSuccess(res.user);
+    if (res.success) {
+      if (onLoginSuccess) onLoginSuccess(email);
     } else {
       setLoginError(res.errorMessage || 'Incorrect email or password');
     }
@@ -380,62 +380,9 @@ export const DesktopAuthView: React.FC<DesktopAuthViewProps> = ({
                     fontSize: '12px',
                     lineHeight: '1.45',
                     color: '#475569',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
                   }}
                 >
-                  <div style={{ fontWeight: 600, color: '#334155' }}>
-                    Sign in with your role-based credentials:
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmail('drv014@waypoint.lk');
-                        setPassword('Waypoint@2026');
-                      }}
-                      style={{
-                        alignSelf: 'flex-start',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        backgroundColor: '#FEF3C7',
-                        color: '#92400E',
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        border: '1px solid #FDE68A',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span>🚚 Driver Quick Fill: drv014@waypoint.lk</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmail('loader@waypoint.lk');
-                        setPassword('Waypoint@2026');
-                      }}
-                      style={{
-                        alignSelf: 'flex-start',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        backgroundColor: '#F1F5F9',
-                        color: '#334155',
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        border: '1px solid #CBD5E1',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span>📦 Loader Quick Fill: loader@waypoint.lk</span>
-                    </button>
-                  </div>
+                  This portal is for Loader accounts. Dispatcher/Driver/Store Manager use their own login link.
                 </div>
               </form>
             </div>

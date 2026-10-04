@@ -20,6 +20,18 @@ service OrderService {
   // List orders with optional filters (date, outlet, status)
   rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
 
+  // Planning-facing allocation input for one date and optional depot.
+  rpc GetOrders(GetOrdersRequest) returns (GetOrdersResponse);
+
+  // Planning-facing outlet reference data.
+  rpc GetOutlets(GetOutletsRequest) returns (GetOutletsResponse);
+
+  // Planning-facing vehicle reference data.
+  rpc GetVehicles(GetVehiclesRequest) returns (GetVehiclesResponse);
+
+  // Planning-facing calendar rows for an optional date range.
+  rpc GetCalendar(GetCalendarRequest) returns (GetCalendarResponse);
+
   // Mark a set of orders as closed after delivery confirmation
   rpc CloseOrders(CloseOrdersRequest) returns (CloseOrdersResponse);
 
@@ -28,6 +40,9 @@ service OrderService {
 
   // Get vehicle reference data by ID
   rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse);
+
+  // Planning-facing fleet query. Order Service team must implement this RPC.
+  rpc ListVehicles(ListVehiclesRequest) returns (ListVehiclesResponse);
 }
 
 // ── Place Order ────────────────────────────────
@@ -92,6 +107,53 @@ message ListOrdersResponse {
   int32 page_size = 4;
 }
 
+message GetOrdersRequest {
+  string date = 1;
+  string depot = 2;
+}
+
+message GetOrdersResponse {
+  repeated Order orders = 1;
+}
+
+message GetOutletsRequest {
+}
+
+message GetOutletsResponse {
+  repeated Outlet outlets = 1;
+}
+
+message GetVehiclesRequest {
+}
+
+message GetVehiclesResponse {
+  repeated Vehicle vehicles = 1;
+}
+
+message GetCalendarRequest {
+  string date_from = 1;
+  string date_to = 2;
+}
+
+message CalendarRow {
+  string date = 1;
+  int32 dow = 2;
+  string dow_name = 3;
+  bool is_weekend = 4;
+  int32 iso_year = 5;
+  int32 iso_week = 6;
+  bool is_payday = 7;
+  string festival = 8;
+  bool festival_ramp = 9;
+  bool is_holiday = 10;
+  bool monsoon = 11;
+  bool is_operating = 12;
+}
+
+message GetCalendarResponse {
+  repeated CalendarRow rows = 1;
+}
+
 // ── Close Orders ───────────────────────────────
 message CloseOrdersRequest {
   // List of order IDs to close
@@ -125,6 +187,15 @@ message GetVehicleResponse {
   Vehicle vehicle = 1;
 }
 
+message ListVehiclesRequest {
+  string depot = 1;
+  bool available_only = 2;
+}
+
+message ListVehiclesResponse {
+  repeated Vehicle vehicles = 1;
+}
+
 // ── Shared Entity Messages ─────────────────────
 message Order {
   string order_id = 1;
@@ -153,6 +224,8 @@ message Outlet {
   string parking_type = 5;
   double lat = 6;
   double lng = 7;
+  string window_open = 8;
+  string window_close = 9;
 }
 
 message Vehicle {
@@ -166,4 +239,10 @@ message Vehicle {
   string temp_capability = 6;
   string depot = 7;
   string brand = 8;
+  string driver_id = 9;
+  string driver_name = 10;
+  bool active = 11;
+  bool available = 12;
+  double weekly_fuel_quota_l = 13;
+  double weekly_fuel_used_l = 14;
 }

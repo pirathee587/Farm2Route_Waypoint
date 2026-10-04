@@ -37,12 +37,12 @@ html, body, #root {
   background-color: #FFFFFF;
   color: #0f172a;
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 button {
@@ -118,4 +118,105 @@ a {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Dispatcher Dashboard Responsive ─────────────── */
+@media (max-width: 1200px) {
+  .summary-cards-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+  .dashboard-main-grid {
+    grid-template-columns: 1fr 280px !important;
+  }
+  .dispatcher-five-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  .fleet-main-grid {
+    grid-template-columns: minmax(0, 1fr) 280px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .summary-cards-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .dashboard-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sidebar-toggle-btn {
+    display: flex !important;
+  }
+  .dashboard-content {
+    padding: 20px 16px 32px !important;
+  }
+  .fleet-main-grid,
+  .reports-two-column-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .reports-insights-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .dispatcher-analytics-content {
+    padding: 20px 16px 32px !important;
+  }
+  .planning-main-grid,
+  .tracking-main-grid,
+  .order-details-grid,
+  .planned-trip-grid,
+  .deferred-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .tracking-summary-grid,
+  .orders-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .selected-orders-bar {
+    min-width: 0 !important;
+    width: calc(100vw - 96px) !important;
+    max-width: 960px !important;
+  }
+  .dispatcher-modal {
+    width: min(500px, calc(100vw - 32px)) !important;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+  .dispatcher-detail-content {
+    padding: 20px 16px 32px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .dispatcher-sidebar {
+    width: 64px !important;
+    min-width: 64px !important;
+  }
+  .summary-cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .dashboard-content {
+    padding: 16px 12px 28px !important;
+  }
+  .dispatcher-five-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .dispatcher-analytics-content {
+    padding: 16px 12px 28px !important;
+  }
+  .tracking-summary-grid,
+  .orders-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .selected-orders-bar {
+    width: calc(100vw - 24px) !important;
+    left: 12px !important;
+    transform: none !important;
+  }
+  .dispatcher-detail-content {
+    padding: 16px 12px 28px !important;
+  }
 }

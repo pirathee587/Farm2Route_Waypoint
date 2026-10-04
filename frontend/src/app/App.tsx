@@ -1,244 +1,187 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from '@/pages/login/LoginPage';
 import { LoadingPortalPage } from '@/pages/loading/LoadingPortalPage';
-import { DriverPortalPage } from '@/pages/delivery/DriverPortalPage';
-import { AuthUser } from '@/features/auth/authApi';
+import { StoreManagerLayout } from '@/shared/layouts/StoreManagerLayout';
+import { StoreManagerRouteGuard } from '@/shared/routes/StoreManagerRouteGuard';
+import { DashboardPage } from '@/pages/store-manager/DashboardPage';
+import { NewOrderPage } from '@/pages/store-manager/NewOrderPage';
+import { OrderConfirmedPage } from '@/pages/store-manager/OrderConfirmedPage';
+import { OrderHistoryPage } from '@/pages/store-manager/OrderHistoryPage';
+import { DeliveryTrackingPage } from '@/pages/store-manager/DeliveryTrackingPage';
+import { DeferralPage } from '@/pages/store-manager/DeferralPage';
+import { ReceivingPage } from '@/pages/store-manager/ReceivingPage';
+import { ReceiptConfirmationPage } from '@/pages/store-manager/ReceiptConfirmationPage';
+import { DispatcherDashboardPage } from '@/pages/dashboard/DispatcherDashboardPage';
+import { OrdersQueuePage } from '@/pages/orders/OrdersQueuePage';
+import { OrderDetailsPage } from '@/pages/orders/OrderDetailsPage';
+import { RoutePlanningPage } from '@/pages/planning/RoutePlanningPage';
+import { PlannedTripDetailPage } from '@/pages/planning/PlannedTripDetailPage';
+import { CapacityShortfallPage } from '@/pages/planning/CapacityShortfallPage';
+import { DeferredOrdersPage } from '@/pages/planning/DeferredOrdersPage';
+import { LiveTrackingPage } from '@/pages/tracking/LiveTrackingPage';
+import { TripDetailPage } from '@/pages/tracking/TripDetailPage';
+import { TripLiveMapPage } from '@/pages/tracking/TripLiveMapPage';
+import { FleetCapacityPage } from '@/pages/fleet/FleetCapacityPage';
+import { ReportsPage } from '@/pages/reports/ReportsPage';
+import type { QueueOrder } from '@/entities/order/orderTypes';
+
+type DispatcherRoute = 'dashboard' | 'orders' | 'order-details' | 'planning' | 'planned-trip' |
+  'capacity-shortfall' | 'deferred-orders' | 'live-tracking' | 'live-trip-detail' |
+  'live-trip-map' | 'fleet' | 'reports';
+
+function routeFromPath(pathname: string): { route: DispatcherRoute; id?: string } {
+  const p = pathname.split('/').filter(Boolean);
+  if (p[0] !== 'dispatcher') return { route: 'dashboard' };
+  if (p[1] === 'orders' && p[2]) return { route: 'order-details', id: decodeURIComponent(p[2]) };
+  if (p[1] === 'orders') return { route: 'orders' };
+  if (p[1] === 'planning' && p[2] === 'trips' && p[3]) return { route: 'planned-trip', id: decodeURIComponent(p[3]) };
+  if (p[1] === 'planning' && p[2] === 'shortfall') return { route: 'capacity-shortfall' };
+  if (p[1] === 'planning') return { route: 'planning' };
+  if (p[1] === 'deferred') return { route: 'deferred-orders' };
+  if (p[1] === 'tracking' && p[2] && p[3] === 'map') return { route: 'live-trip-map', id: decodeURIComponent(p[2]) };
+  if (p[1] === 'tracking' && p[2]) return { route: 'live-trip-detail', id: decodeURIComponent(p[2]) };
+  if (p[1] === 'tracking') return { route: 'live-tracking' };
+  if (p[1] === 'fleet') return { route: 'fleet' };
+  if (p[1] === 'reports') return { route: 'reports' };
+  return { route: 'dashboard' };
+}
+
+const dispatcherPaths: Partial<Record<DispatcherRoute, string>> = {
+  dashboard: '/dispatcher/dashboard', orders: '/dispatcher/orders', planning: '/dispatcher/planning',
+  'capacity-shortfall': '/dispatcher/planning/shortfall', 'deferred-orders': '/dispatcher/deferred',
+  'live-tracking': '/dispatcher/tracking', fleet: '/dispatcher/fleet', reports: '/dispatcher/reports',
+};
 
 export const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('waypoint_user_session');
-      if (storedUser) {
-        try {
-          return JSON.parse(storedUser);
-        } catch {
-          return null;
-        }
-      }
+  const isDispatcherPath = window.location.pathname.startsWith('/dispatcher');
+  const initial = routeFromPath(window.location.pathname);
+  const [dispatcherRoute, setDispatcherRoute] = useState<DispatcherRoute>(initial.route);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(initial.route === 'order-details' ? initial.id ?? null : null);
+  const [plannedTripId, setPlannedTripId] = useState<string | null>(initial.route === 'planned-trip' ? initial.id ?? null : null);
+  const [planningSelectedOrders, setPlanningSelectedOrders] = useState<QueueOrder[]>([]);
+  const [selectedTrackingTripId, setSelectedTrackingTripId] = useState(initial.route === 'live-trip-detail' || initial.route === 'live-trip-map' ? initial.id ?? '' : 'TRIP-0925-014');
+  const [currentUser, setCurrentUser] = useState<{ email: string; role?: string } | null>(() => {
+    const storedUser = localStorage.getItem('waypoint_loader_session');
+    if (storedUser) {
+      try { return JSON.parse(storedUser); } catch { return null; }
+    }
+    if (window.location.hash === '#loading' || window.location.hash === '#portal') {
+      return { email: 'kumar.s@waypoint.com', role: 'LOADER' };
     }
     return null;
   });
 
-  const [portalMode, setPortalMode] = useState<'driver' | 'loading' | 'login'>(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('waypoint_user_session');
-      let user: AuthUser | null = null;
-      if (storedUser) {
-        try {
-          user = JSON.parse(storedUser);
-        } catch {
-          user = null;
-        }
-      }
+  const navigate = (next: DispatcherRoute, path: string, replace = false) => {
+    if (replace) window.history.replaceState({}, '', path);
+    else if (window.location.pathname !== path) window.history.pushState({}, '', path);
+    setDispatcherRoute(next);
+  };
 
-      // If user is not logged in, ALWAYS start at 'login'
-      if (!user) {
-        return 'login';
-      }
-
-      const hash = window.location.hash;
-      if (hash === '#driver' || hash === '#delivery') return 'driver';
-      if (hash === '#loading' || hash === '#portal') return 'loading';
-      if (hash === '#login') return 'login';
-
-      return user.role === 'LOADER' ? 'loading' : 'driver';
-    }
-    return 'login';
-  });
+  useEffect(() => {
+    if (!isDispatcherPath) return;
+    if (!window.location.pathname.startsWith('/dispatcher/')) navigate('dashboard', dispatcherPaths.dashboard!, true);
+    const onPopState = () => {
+      const next = routeFromPath(window.location.pathname);
+      setDispatcherRoute(next.route);
+      if (next.route === 'order-details') setSelectedOrderId(next.id ?? null);
+      if (next.route === 'planned-trip') setPlannedTripId(next.id ?? null);
+      if (next.route === 'live-trip-detail' || next.route === 'live-trip-map') setSelectedTrackingTripId(next.id ?? '');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [isDispatcherPath]);
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash;
-      const storedUser = localStorage.getItem('waypoint_user_session');
-      let user: AuthUser | null = currentUser;
-      if (!user && storedUser) {
-        try {
-          user = JSON.parse(storedUser);
-        } catch {
-          user = null;
-        }
-      }
-
-      // Protect portals: unauthenticated users cannot access portals directly
-      if (!user) {
-        if (hash !== '#login') {
-          window.location.hash = '#login';
-        }
-        setPortalMode('login');
-        return;
-      }
-
-      if (hash === '#login') {
-        setPortalMode('login');
-      } else if (hash === '#loading' || hash === '#portal') {
-        setPortalMode('loading');
-      } else if (hash === '#driver' || hash === '#delivery') {
-        setPortalMode('driver');
+      if (window.location.hash === '#login') {
+        setCurrentUser(null);
+        localStorage.removeItem('waypoint_loader_session');
+      } else if (window.location.hash === '#loading' || window.location.hash === '#portal') {
+        const user = { email: 'kumar.s@waypoint.com', role: 'LOADER' };
+        setCurrentUser(user);
+        localStorage.setItem('waypoint_loader_session', JSON.stringify(user));
       }
     };
-
-    // Ensure initial unauthenticated route defaults to #login
-    if (!currentUser && window.location.hash !== '#login') {
-      window.location.hash = '#login';
-      setPortalMode('login');
-    }
-
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [currentUser]);
-
-  const handleLoginSuccess = (user: AuthUser) => {
-    setCurrentUser(user);
-    localStorage.setItem('waypoint_user_session', JSON.stringify(user));
-    if (user.role === 'LOADER') {
-      setPortalMode('loading');
-      window.location.hash = '#loading';
-    } else {
-      // Driver or other roles navigate to Driver Portal
-      setPortalMode('driver');
-      window.location.hash = '#driver';
-    }
-  };
+  }, []);
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('waypoint_user_session');
-    setPortalMode('login');
+    localStorage.removeItem('waypoint_loader_session');
     window.location.hash = '#login';
   };
 
+  const handleGlobalNavigate = (target: string) => {
+    if (target === 'route-planning') target = 'planning';
+    if (target === 'shortfall') target = 'capacity-shortfall';
+    const direct = target as DispatcherRoute;
+    if (dispatcherPaths[direct]) return navigate(direct, dispatcherPaths[direct]!);
+    if (target.startsWith('planned-trip/')) {
+      const id = target.slice('planned-trip/'.length); setPlannedTripId(id);
+      return navigate('planned-trip', `/dispatcher/planning/trips/${encodeURIComponent(id)}`);
+    }
+    if (target.startsWith('live-trip-detail/')) {
+      const id = target.slice('live-trip-detail/'.length); setSelectedTrackingTripId(id);
+      return navigate('live-trip-detail', `/dispatcher/tracking/${encodeURIComponent(id)}`);
+    }
+    if (target.startsWith('live-trip-map/')) {
+      const id = target.slice('live-trip-map/'.length); setSelectedTrackingTripId(id);
+      return navigate('live-trip-map', `/dispatcher/tracking/${encodeURIComponent(id)}/map`);
+    }
+  };
+
+  const handleViewOrderDetails = (id: string) => {
+    setSelectedOrderId(id);
+    navigate('order-details', `/dispatcher/orders/${encodeURIComponent(id)}`);
+  };
+
+  const handlePlanOrders = (orders: QueueOrder[]) => {
+    setPlanningSelectedOrders(orders);
+    navigate('planning', dispatcherPaths.planning!);
+  };
+
+  if (currentUser) return <LoadingPortalPage onLogout={handleLogout} />;
+
+  if (isDispatcherPath) {
+    switch (dispatcherRoute) {
+      case 'dashboard': return <DispatcherDashboardPage onNavigateGlobal={handleGlobalNavigate} />;
+      case 'orders': return <OrdersQueuePage onNavigateGlobal={handleGlobalNavigate} onViewOrderDetails={handleViewOrderDetails} onPlanOrders={handlePlanOrders} />;
+      case 'order-details': return <OrderDetailsPage orderId={selectedOrderId ?? ''} onNavigateGlobal={handleGlobalNavigate} onBack={() => window.history.back()} onPlanOrder={handlePlanOrders} />;
+      case 'planning': return <RoutePlanningPage onNavigateGlobal={handleGlobalNavigate} selectedOrders={planningSelectedOrders} />;
+      case 'planned-trip': return <PlannedTripDetailPage tripId={plannedTripId ?? ''} onNavigateGlobal={handleGlobalNavigate} />;
+      case 'capacity-shortfall': return <CapacityShortfallPage onNavigateGlobal={handleGlobalNavigate} onBackToPlanning={() => navigate('planning', dispatcherPaths.planning!)} />;
+      case 'deferred-orders': return <DeferredOrdersPage onNavigateGlobal={handleGlobalNavigate} />;
+      case 'live-tracking': return <LiveTrackingPage onNavigateGlobal={handleGlobalNavigate} selectedTripId={selectedTrackingTripId} onSelectTrip={setSelectedTrackingTripId} />;
+      case 'live-trip-detail': return <TripDetailPage tripId={selectedTrackingTripId} onNavigateGlobal={handleGlobalNavigate} onBack={() => window.history.back()} />;
+      case 'live-trip-map': return <TripLiveMapPage tripId={selectedTrackingTripId} onNavigateGlobal={handleGlobalNavigate} onBack={() => window.history.back()} />;
+      case 'fleet': return <FleetCapacityPage onNavigateGlobal={handleGlobalNavigate} />;
+      case 'reports': return <ReportsPage onNavigateGlobal={handleGlobalNavigate} />;
+    }
+  }
+
   return (
-    <div>
-      {/* Top Quick Role / Portal Switcher */}
-      <aside
-        aria-label="Portal switcher"
-        style={{
-          position: 'fixed',
-          top: 12,
-          left: 16,
-          zIndex: 9999,
-          display: 'none',
-          gap: 6,
-          alignItems: 'center',
-          backgroundColor: 'rgba(15, 23, 42, 0.92)',
-          padding: '6px 12px',
-          borderRadius: 14,
-          backdropFilter: 'blur(8px)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
-          border: '1px solid rgba(255,255,255,0.08)',
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10.5,
-            fontWeight: 800,
-            color: '#94a3b8',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginRight: 4,
-          }}
-        >
-          WayPoint:
-        </span>
-
-        {currentUser ? (
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                setPortalMode('driver');
-                window.location.hash = '#driver';
-              }}
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                backgroundColor: portalMode === 'driver' ? '#facc15' : 'transparent',
-                color: portalMode === 'driver' ? '#0f172a' : '#cbd5e1',
-                padding: '4px 8px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                border: 'none',
-              }}
-            >
-              🚚 Driver Portal
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPortalMode('loading');
-                window.location.hash = '#loading';
-              }}
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                backgroundColor: portalMode === 'loading' ? '#facc15' : 'transparent',
-                color: portalMode === 'loading' ? '#0f172a' : '#cbd5e1',
-                padding: '4px 8px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                border: 'none',
-              }}
-            >
-              📦 Loading Portal
-            </button>
-            <span
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                color: '#38bdf8',
-                backgroundColor: 'rgba(56, 189, 248, 0.12)',
-                padding: '3px 8px',
-                borderRadius: 6,
-                marginLeft: 4,
-              }}
-            >
-              {currentUser.role}: {currentUser.fullName || currentUser.email}
-            </span>
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                backgroundColor: '#ef4444',
-                color: '#ffffff',
-                padding: '4px 8px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                border: 'none',
-                marginLeft: 4,
-              }}
-            >
-              Logout
-            </button>
-          </>
-        ) : (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#facc15',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            🔐 Sign In with Driver credentials to access Driver Portal
-          </span>
-        )}
-      </aside>
-
-      {/* Portal Views */}
-      {portalMode === 'driver' && currentUser && (
-        <DriverPortalPage onLogout={handleLogout} currentUser={currentUser} />
-      )}
-      {portalMode === 'loading' && currentUser && (
-        <LoadingPortalPage onLogout={handleLogout} />
-      )}
-      {portalMode === 'login' && (
-        <LoginPage onLoginSuccess={handleLoginSuccess} />
-      )}
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Navigate replace to="/store-manager" />} path="/" />
+        <Route element={<LoginPage />} path="/login" />
+        <Route element={<StoreManagerRouteGuard />} path="/store-manager">
+          <Route element={<StoreManagerLayout />}>
+            <Route element={<DashboardPage />} index />
+            <Route element={<DashboardPage />} path="dashboard" />
+            <Route element={<NewOrderPage />} path="orders/new" />
+            <Route element={<OrderConfirmedPage />} path="orders/:id/confirmed" />
+            <Route element={<OrderHistoryPage />} path="orders" />
+            <Route element={<DeliveryTrackingPage />} path="orders/:id/tracking" />
+            <Route element={<DeferralPage />} path="orders/:id/deferral" />
+            <Route element={<ReceiptConfirmationPage />} path="orders/:id/receipt" />
+            <Route element={<ReceivingPage />} path="receiving" />
+          </Route>
+        </Route>
+        <Route element={<Navigate replace to="/store-manager" />} path="*" />
+      </Routes>
+    </BrowserRouter>
   );
 };
 

@@ -4,9 +4,9 @@ spring:
 
   # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://${SUPABASE_DB_HOST:localhost}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=${DB_SSLMODE:disable}}
-    username: ${SUPABASE_DB_USER:postgres}
-    password: ${SUPABASE_DB_PASSWORD:postgrespassword}
+    url: ${DB_URL:jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require}
+    username: ${DB_USERNAME:${SUPABASE_DB_USER}}
+    password: ${DB_PASSWORD:${SUPABASE_DB_PASSWORD}}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: PlanningHikariPool
@@ -20,7 +20,7 @@ spring:
   # ── JPA ──────────────────────────────────────────────────────────────────
   jpa:
     hibernate:
-      ddl-auto: none          # Supabase manages schema via migrations
+      ddl-auto: validate      # Flyway owns schema; Hibernate only verifies mappings
     show-sql: false
     properties:
       hibernate:
@@ -28,13 +28,12 @@ spring:
         default_schema: public
         format_sql: true
     open-in-view: false
+
   flyway:
-    enabled: true
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
-    validate-on-migrate: false
-    table: ${SPRING_FLYWAY_TABLE:flyway_planning_history}
-    locations: classpath:db/migration
 
   # ── RabbitMQ ─────────────────────────────────────────────────────────────
   rabbitmq:
@@ -42,7 +41,7 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:waypoint}
     password: ${RABBITMQ_PASSWORD}
-    virtual-host: ${RABBITMQ_VHOST:waypoint}
+    virtual-host: waypoint
     listener:
       simple:
         acknowledge-mode: manual
@@ -60,6 +59,9 @@ server:
 
 # ── Actuator ────────────────────────────────────────────────────────────
 management:
+  health:
+    rabbit:
+      enabled: ${RABBITMQ_HEALTH_ENABLED:false}
   endpoints:
     web:
       exposure:
@@ -72,12 +74,19 @@ management:
 grpc:
   server:
     port: ${PLANNING_GRPC_PORT:9090}
+  client:
+    order-service:
+      address: static://${ORDER_SERVICE_GRPC_HOST:order-service}:${ORDER_SERVICE_GRPC_PORT:9090}
+      negotiation-type: plaintext
   order-service:
     host: ${ORDER_SERVICE_GRPC_HOST:order-service}
     port: ${ORDER_SERVICE_GRPC_PORT:9090}
 
 # ── RabbitMQ Exchange / Queue names ──────────────────────────────────────
 waypoint:
+  planning:
+    master-data:
+      mode: ${PLANNING_MASTER_DATA_MODE:jdbc}
   rabbitmq:
     exchange: waypoint.events
     queues:
@@ -88,11 +97,6 @@ waypoint:
       order-placed: order.placed
       order-deferred: order.deferred
       allocation-completed: allocation.completed
-  reference-data:
-    enabled: ${REFERENCE_DATA_ENABLED:true}
-  outbox:
-    enabled: ${OUTBOX_ENABLED:true}
-    poll-ms: ${OUTBOX_POLL_MS:500}
 
 # ── Logging ──────────────────────────────────────────────────────────────
 logging:

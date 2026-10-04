@@ -1,19 +1,40 @@
 package com.waypoint.planning.controller;
 
-import com.waypoint.planning.config.GatewayTrustFilter;import com.waypoint.planning.dto.PlanningModels.*;import com.waypoint.planning.service.PlanningService;import jakarta.servlet.http.HttpServletRequest;import org.springframework.dao.EmptyResultDataAccessException;import org.springframework.format.annotation.DateTimeFormat;import org.springframework.http.*;import org.springframework.web.bind.annotation.*;import java.time.LocalDate;import java.util.*;
+import com.waypoint.planning.model.PlanningModels.*;
+import com.waypoint.planning.dto.DraftTripDtos.*;
+import com.waypoint.planning.port.PlanningMasterDataPort;
+import com.waypoint.planning.service.*;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
+import java.time.*;import java.util.*;
 
-@RestController @RequestMapping("/api/planning")
+@RestController
+@RequestMapping("/api/planning")
 public class PlanningController {
-  private final PlanningService service;public PlanningController(PlanningService service){this.service=service;}
-  @GetMapping("/queue") public List<QueueGroup> queue(@RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)LocalDate date){return service.queue(date);}
-  @PostMapping("/allocate") public AllocationResult allocate(@RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)LocalDate date,HttpServletRequest req){GatewayTrustFilter.requireDispatcher(req);return service.allocate(date,user(req));}
-  @PostMapping("/manual-override") public ManualOverrideResponse manual(@RequestBody ManualOverrideRequest body,HttpServletRequest req){GatewayTrustFilter.requireDispatcher(req);return service.validate(body);}
-  @PostMapping("/publish") public PublishResponse publish(@RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)LocalDate date,HttpServletRequest req){GatewayTrustFilter.requireDispatcher(req);return service.publish(date,user(req));}
-  @GetMapping("/deferrals") public List<DeferralHistory> deferrals(@RequestParam(required=false)String outletId){return service.deferrals(outletId);}
-  @GetMapping("/progress") public List<ProgressRow> progress(@RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)LocalDate date){return service.progress(date);}
-  @DeleteMapping("/trips/{tripId}/stops/{stopId}") public Map<String,Object> removeStop(@PathVariable UUID tripId,@PathVariable UUID stopId,HttpServletRequest req){GatewayTrustFilter.requireDispatcher(req);return service.removeStop(tripId,stopId,user(req));}
-  private String user(HttpServletRequest req){String id=req.getHeader("X-User-Id");return id==null?"dispatcher":id;}
-  @ExceptionHandler(GatewayTrustFilter.ForbiddenException.class) @ResponseStatus(HttpStatus.FORBIDDEN) Map<String,String> forbidden(){return Map.of("code","FORBIDDEN","message","DISPATCHER role required");}
-  @ExceptionHandler(com.waypoint.planning.repository.PlanningRepository.ConflictException.class) public ResponseEntity<Map<String,String>> conflict(com.waypoint.planning.repository.PlanningRepository.ConflictException e){return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code",e.getCode(),"message",e.getMessage()));}
-  @ExceptionHandler(Exception.class) ResponseEntity<Map<String,String>> error(Exception e){HttpStatus status=e instanceof EmptyResultDataAccessException?HttpStatus.NOT_FOUND:HttpStatus.UNPROCESSABLE_ENTITY;return ResponseEntity.status(status).body(Map.of("code","PLANNING_ERROR","message",Objects.toString(e.getMessage(),e.getClass().getSimpleName())));}
+    private final DashboardService dashboard;private final TripService trips;private final DraftTripService drafts;private final DeferralService deferrals;private final SuggestionService suggestions;private final ShortfallService shortfalls;private final PlanningMasterDataPort refs;
+    public PlanningController(DashboardService dashboard,TripService trips,DraftTripService drafts,DeferralService deferrals,SuggestionService suggestions,ShortfallService shortfalls,PlanningMasterDataPort refs){this.dashboard=dashboard;this.trips=trips;this.drafts=drafts;this.deferrals=deferrals;this.suggestions=suggestions;this.shortfalls=shortfalls;this.refs=refs;}
+
+    @GetMapping("/dashboard") public DashboardSummary dashboard(@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date){return dashboard.get(date==null?LocalDate.now():date);}
+    @GetMapping({"/orders","/orders/unplanned"}) public List<OrderRef> orders(@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date){return refs.listPlanningOrders(date==null?LocalDate.now():date);}
+    @GetMapping("/orders/{id}") public OrderRef order(@PathVariable UUID id){return refs.getOrder(id);}
+    @PostMapping("/trips") public ResponseEntity<PersistedTripResponse> createTrip(@Valid @RequestBody CreateTripRequest r){return ResponseEntity.status(201).body(drafts.create(r));}
+    @GetMapping("/trips/{id}") public PersistedTripResponse trip(@PathVariable UUID id){return drafts.get(id);}
+    @PutMapping("/trips/{id}") public PersistedTripResponse updateTrip(@PathVariable UUID id,@RequestBody UpdateTripRequest r){return drafts.update(id,r);}
+    @PostMapping("/trips/{id}/orders") public PersistedTripResponse addOrder(@PathVariable UUID id,@Valid @RequestBody AddOrderRequest r,@RequestHeader(value="X-User-Id",required=false)String user){return drafts.addOrder(id,r,user);}
+    @DeleteMapping("/trips/{id}/orders/{orderId}") public PersistedTripResponse removeOrder(@PathVariable UUID id,@PathVariable UUID orderId){return drafts.removeOrder(id,orderId);}
+    @PutMapping("/trips/{id}/vehicle") public PersistedTripResponse assignVehicle(@PathVariable UUID id,@Valid @RequestBody AssignVehicleRequest r){return drafts.assignVehicle(id,r);}
+    @PutMapping("/trips/{id}/stops") public PersistedTripResponse reorderStops(@PathVariable UUID id,@Valid @RequestBody UpdateStopsRequest r){return drafts.reorder(id,r);}
+    @PostMapping("/trips/{id}/validate") public TripValidationResponse validatePersisted(@PathVariable UUID id){return drafts.validate(id);}
+    @PostMapping("/trips/{id}/confirm") public PersistedTripResponse confirmPersisted(@PathVariable UUID id,@RequestHeader(value="X-User-Id",required=false)String user){return drafts.confirm(id,user);}
+    @PostMapping("/trips/validate") public ValidationResult validate(@RequestBody TripDraftRequest r){return trips.validate(r);}
+    @PostMapping("/suggestions") public SuggestionResponse suggest(@RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date){return suggestions.suggest(date);}
+    @GetMapping("/shortfalls") public ShortfallSummary shortfalls(@RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date){return shortfalls.get(date);}
+    @GetMapping("/deferred") public List<DeferralView> deferred(@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate date){return deferrals.list(date==null?LocalDate.now():date);}
+    @PostMapping("/orders/{id}/defer") public ResponseEntity<Map<String,Object>> defer(@PathVariable UUID id,@RequestBody DeferralRequest r,@RequestHeader(value="X-User-Id",required=false)String user){UUID d=deferrals.defer(id,r,user);return ResponseEntity.status(201).body(Map.of("deferralId",d,"orderId",id,"status","DEFERRED"));}
+    @PostMapping("/orders/{id}/return-to-planning") public Map<String,Object> returnToPlanning(@PathVariable UUID id){deferrals.returnToPlanning(id);return Map.of("orderId",id,"planningStatus","UNPLANNED");}
+    @PostMapping("/deferred/{id}/return-to-planning") public Map<String,Object> returnDeferred(@PathVariable UUID id){return returnToPlanning(id);}
+    @PatchMapping("/deferred/{id}/next-date") public Map<String,Object> updateNextDate(@PathVariable UUID id,@RequestBody UpdateNextPlannedDateRequest r){deferrals.updateNextDate(id,r);return Map.of("orderId",id,"nextPlannedDate",r.nextPlannedDate(),"planningStatus","DEFERRED");}
+    @PostMapping("/orders/{id}/replan") public Map<String,Object> replan(@PathVariable UUID id){deferrals.returnToPlanning(id);return Map.of("orderId",id,"planningStatus","UNPLANNED");}
 }

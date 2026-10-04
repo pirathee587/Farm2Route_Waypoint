@@ -1,0 +1,42 @@
+.new-order-page { display: grid; gap: 24px; max-width: 980px; }
+.new-order-back { display: inline-flex; align-items: center; gap: 7px; width: fit-content; color: #77776f; font-size: 13px; font-weight: 700; }
+.new-order-back:hover { color: #111111; }
+.new-order-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.new-order-heading h2 { margin-top: 7px; font-size: 30px; letter-spacing: -.04em; }
+.cutoff-clock { display: grid; gap: 5px; padding: 13px 16px; border: 1px solid #ecd37b; border-radius: 12px; background: #fff9dd; color: #705400; text-align: right; }
+.cutoff-clock span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.cutoff-clock strong { font-size: 22px; letter-spacing: .04em; }
+.cutoff-clock.is-closed { border-color: #f1c0b9; background: #fff0ee; color: #a6382d; }
+.new-order-form { display: grid; gap: 16px; }
+.new-order-section { display: grid; gap: 22px; padding: 26px; border: 1px solid #e5e5df; border-radius: 12px; background: #ffffff; }
+.new-order-section-heading { display: flex; gap: 13px; align-items: flex-start; }
+.new-order-section-heading > span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: #111111; color: #f5b912; font-size: 11px; font-weight: 800; }
+.new-order-section-heading h3 { font-size: 18px; letter-spacing: -.02em; }
+.new-order-section-heading p { margin-top: 4px; color: #85857e; font-size: 13px; }
+.new-order-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.new-order-field, .order-type-field, .order-item-row label { display: grid; gap: 8px; color: #55554f; font-size: 12px; font-weight: 700; }
+.new-order-field input, .new-order-field select, .order-item-row input { width: 100%; padding: 12px 13px; border: 1px solid #dcdcd5; border-radius: 9px; background: #ffffff; color: #22221e; font: inherit; font-size: 13px; font-weight: 500; }
+.new-order-field input:focus, .new-order-field select:focus, .order-item-row input:focus { border-color: #d3a500; box-shadow: 0 0 0 3px rgba(245,185,18,.16); }
+.select-wrap { position: relative; }
+.select-wrap select { appearance: none; padding-right: 38px; }
+.select-wrap svg { position: absolute; right: 12px; top: 50%; pointer-events: none; transform: translateY(-50%); }
+.new-order-field em, .order-type-field em, .order-item-row em { color: #b64235; font-size: 11px; font-style: normal; font-weight: 600; }
+.order-type-field { max-width: 360px; }
+.order-type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; border-radius: 10px; background: #f1f1ec; }
+.order-type-toggle button { padding: 10px; border-radius: 7px; color: #77776f; font-size: 13px; font-weight: 700; }
+.order-type-toggle button.is-selected { background: #ffffff; color: #111111; box-shadow: 0 2px 5px rgba(17,17,17,.08); }
+.order-items { display: grid; gap: 12px; }
+.order-item-row { display: grid; grid-template-columns: minmax(0, 1fr) 100px 140px 34px; gap: 10px; align-items: start; }
+.remove-item { display: grid; place-items: center; width: 34px; height: 38px; border-radius: 8px; color: #a5a59e; }
+.remove-item:hover:not(:disabled) { background: #fff0ee; color: #b64235; }
+.remove-item:disabled { cursor: not-allowed; opacity: .35; }
+.add-item { display: inline-flex; align-items: center; gap: 7px; width: fit-content; color: #8b6800; font-size: 13px; font-weight: 800; }
+.add-item:hover { color: #111111; }
+.new-order-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.new-order-cancel, .new-order-submit { display: inline-flex; align-items: center; gap: 8px; padding: 12px 17px; border-radius: 9px; font-size: 13px; font-weight: 800; }
+.new-order-cancel { color: #66665f; }
+.new-order-submit { background: #f5b912; color: #111111; }
+.new-order-submit:hover { background: #e2a900; }
+.new-order-submit:disabled { cursor: wait; opacity: .6; }
+.new-order-error { padding: 13px 16px; border: 1px solid #f1c0b9; border-radius: 10px; background: #fff0ee; color: #a6382d; font-size: 13px; font-weight: 600; }
+@media (max-width: 680px) { .new-order-heading { align-items: flex-start; flex-direction: column; } .cutoff-clock { width: 100%; text-align: left; } .new-order-fields { grid-template-columns: 1fr; } .new-order-section { padding: 20px; } .order-item-row { grid-template-columns: minmax(0, 1fr) 86px 110px 30px; gap: 7px; } }

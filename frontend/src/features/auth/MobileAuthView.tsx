@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Radio, ShieldCheck, Check, ArrowLeft } from 'lucide-react';
 import { WaypointMobileHexLogo } from '@/shared/components/Logos';
 import { MobileTopMapBackground } from './AuthIllustration';
-import { authApi, AuthUser } from './authApi';
+import { authApi } from './authApi';
 import { AuthScreen } from './DesktopAuthView';
 
 interface MobileAuthViewProps {
   screen: AuthScreen;
   setScreen: (screen: AuthScreen) => void;
-  onLoginSuccess?: (user: AuthUser) => void;
+  onLoginSuccess?: (email: string) => void;
 }
 
 export const MobileAuthView: React.FC<MobileAuthViewProps> = ({
@@ -36,8 +36,8 @@ export const MobileAuthView: React.FC<MobileAuthViewProps> = ({
     const res = await authApi.login({ email, password });
     setIsSubmitting(false);
 
-    if (res.success && res.user) {
-      if (onLoginSuccess) onLoginSuccess(res.user);
+    if (res.success) {
+      if (onLoginSuccess) onLoginSuccess(email);
     } else {
       setLoginError(res.errorMessage || 'Incorrect email or password');
     }
@@ -275,59 +275,6 @@ export const MobileAuthView: React.FC<MobileAuthViewProps> = ({
               >
                 {isSubmitting ? 'Signing in...' : 'Sign in'}
               </button>
-
-              {/* Demo Sign-in quick-fills */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>
-                  Demo Accounts
-                </div>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('drv014@waypoint.lk');
-                      setPassword('Waypoint@2026');
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: '#FEF3C7',
-                      color: '#92400E',
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      border: '1px solid #FDE68A',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🚚 Driver: drv014@waypoint.lk
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('loader@waypoint.lk');
-                      setPassword('Waypoint@2026');
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: '#F1F5F9',
-                      color: '#334155',
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      border: '1px solid #CBD5E1',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    📦 Loader: loader@waypoint.lk
-                  </button>
-                </div>
-              </div>
 
               {/* Need access? Contact your administrator */}
               <div

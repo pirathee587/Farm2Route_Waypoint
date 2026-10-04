@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { CheckCircle2, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
-import { AuthUser } from '@/features/auth/authApi';
+import { authSession } from '@/features/auth/authSession';
 
-interface LoginPageProps {
-  onLoginSuccess?: (user: AuthUser) => void;
-}
-
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC = () => {
   const [screen, setScreen] = useState<AuthScreen>('login');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
+  const [loggedInUser, setLoggedInUser] = useState<{ email: string } | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleResize = () => {
@@ -19,10 +19,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleLoginSuccess = (user: AuthUser) => {
-    if (onLoginSuccess) {
-      onLoginSuccess(user);
+  const handleLoginSuccess = (email: string) => {
+    if (authSession.isStoreManager()) {
+      navigate('/store-manager');
+      return;
     }
+    setLoggedInUser({ email });
   };
 
   return (
@@ -41,7 +43,49 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         overflow: 'hidden',
       }}
     >
-      {/* Automatic Responsive View: Mobile/Tablet vs Desktop */}
+      {/* Logged in success banner */}
+      {loggedInUser && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            zIndex: 90,
+            backgroundColor: '#10B981',
+            color: '#FFFFFF',
+            padding: '12px 20px',
+            borderRadius: '14px',
+            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '14px',
+            fontWeight: 600,
+          }}
+        >
+          <CheckCircle2 size={18} />
+          <span>Signed in as {loggedInUser.email} (Loader Account)</span>
+          <button
+            type="button"
+            onClick={() => setLoggedInUser(null)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              color: '#FFFFFF',
+              padding: '4px 10px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              marginLeft: '8px',
+            }}
+          >
+            <LogOut size={13} />
+            Sign out
+          </button>
+        </div>
+      )}
+
+      {/* Automatic Responsive View */}
       {isMobile ? (
         <div style={{ width: '100%', minHeight: '100vh' }}>
           <MobileAuthView
@@ -60,5 +104,3 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     </div>
   );
 };
-
-export default LoginPage;
