@@ -155,6 +155,15 @@ describe('Driver Route Map Tests', () => {
       expect(visible.find((s) => s.outlet_id === 'OUT2')).toBeUndefined();
       expect(visible.map((s) => s.outlet_id)).toEqual(['OUT1', 'OUT3']);
     });
+
+    it('excludes stops whose database coordinates are missing', () => {
+      const stops: RouteStop[] = [
+        { stop_id: '1', seq: 1, outlet_id: 'OUT1', name: 'Missing coordinates', lat: 0, lng: 0, status: 'PENDING' },
+        { stop_id: '2', seq: 2, outlet_id: 'OUT2', name: 'Keells', lat: 6.7954545, lng: 79.8876526, status: 'IN_PROGRESS' },
+      ];
+
+      expect(filterVisibleStops(stops).map((s) => s.outlet_id)).toEqual(['OUT2']);
+    });
   });
 
   // 4. Fallback chip shown

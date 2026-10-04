@@ -547,7 +547,7 @@ export const TripSummaryView: React.FC<TripSummaryViewProps> = ({
               </span>
             </div>
 
-            {/* Outcome 3: Style Mall Outlet (Not Delivered) */}
+            {/* Outcome 3: Keells - K-Zone Moratuwa (Not Delivered) */}
             <div
               style={{
                 backgroundColor: '#ffffff',
@@ -579,7 +579,7 @@ export const TripSummaryView: React.FC<TripSummaryViewProps> = ({
                 </div>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>
-                    Style Mall Outlet
+                    Keells - K-Zone Moratuwa
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                     09:24 AM

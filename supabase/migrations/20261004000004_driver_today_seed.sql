@@ -4,7 +4,7 @@ DECLARE
   v_driver UUID := '22222222-2222-2222-2222-222222222214';
   v_trip UUID := '14000000-0000-0000-0000-000000000001';
   v_outlets TEXT[] := ARRAY['OUT001','OUT014','OUT027','OUT032','OUT041','OUT052','OUT063','OUT078'];
-  v_names TEXT[] := ARRAY['FreshMart','Central Supermarket','Style Mall Outlet','TechPoint','Green Grocer','City Pharmacy','Home Essentials','Daily Needs'];
+  v_names TEXT[] := ARRAY['FreshMart','Central Supermarket','Keells - K-Zone Moratuwa','TechPoint','Green Grocer','City Pharmacy','Home Essentials','Daily Needs'];
   v_stops UUID[] := ARRAY[
     '14010000-0000-0000-0000-000000000001'::uuid,'14020000-0000-0000-0000-000000000002'::uuid,
     '14030000-0000-0000-0000-000000000003'::uuid,'14040000-0000-0000-0000-000000000004'::uuid,

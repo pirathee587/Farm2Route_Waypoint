@@ -52,7 +52,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
   onOpenNotifications,
   stopData = {
     stopNumber: 3,
-    outletName: 'Style Mall Outlet',
+    outletName: 'Keells - K-Zone Moratuwa',
     outletCode: 'OUT027',
     city: 'Kandy',
     window: '09:30 AM – 10:00 AM',
