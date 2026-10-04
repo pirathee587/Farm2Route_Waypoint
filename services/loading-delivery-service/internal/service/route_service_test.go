@@ -109,6 +109,18 @@ func TestMapboxProfilesAndGeometryChunks(t *testing.T) {
 	require.Equal(t, int32(2), atomic.LoadInt32(&drivingCalls))
 	require.Len(t, geometry.RouteGeometry.Coordinates, 31)
 }
+func TestFullGeometrySkipsStopsWithMissingCoordinates(t *testing.T) {
+	data := routeFixture()
+	data.Stops = []model.RouteStop{
+		{StopID: uuid.NewString(), Seq: 1, OutletID: "MISSING", Lat: 0, Lng: 0},
+		{StopID: uuid.NewString(), Seq: 2, OutletID: "OUT027", Lat: 6.7954545, Lng: 79.8876526},
+	}
+	s := NewRouteService(&fakeRouteRepo{data: data}, "")
+	geometry, err := s.Geometry(context.Background(), uuid.New(), uuid.New())
+	require.NoError(t, err)
+	require.Len(t, geometry.RouteGeometry.Coordinates, 2)
+	require.Equal(t, []float64{79.8876526, 6.7954545}, geometry.RouteGeometry.Coordinates[1])
+}
 func TestMapboxTimeoutFallsBack(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { time.Sleep(100 * time.Millisecond) }))
 	defer server.Close()
@@ -125,6 +137,17 @@ func TestMissingMapboxTokenFallsBack(t *testing.T) {
 	got, err := s.Route(context.Background(), uuid.New(), uuid.New(), nil)
 	require.NoError(t, err)
 	require.Equal(t, "fallback", got.RouteSource)
+}
+func TestRemoteDeviceLocationFallsBackToTripDepot(t *testing.T) {
+	data := routeFixture()
+	data.Stops[2].Lat = 6.7954545
+	data.Stops[2].Lng = 79.8876526
+	s := NewRouteService(&fakeRouteRepo{data: data}, "")
+	got, err := s.Route(context.Background(), uuid.New(), uuid.New(), &model.Coordinate{Lat: 51.5074, Lng: -0.1278})
+	require.NoError(t, err)
+	require.Less(t, got.NextStop.DistanceKm, 50.0)
+	require.Less(t, got.NextStop.ETAMin, 120)
+	require.Equal(t, 12.5, got.NextStop.DistanceKm)
 }
 func TestRouteOwnershipErrors(t *testing.T) {
 	for _, tc := range []struct {

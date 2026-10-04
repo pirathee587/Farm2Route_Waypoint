@@ -253,6 +253,9 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
         } else {
           lastThrottleTime = now;
           lastFetchedLocationRef.current = newLoc;
+          // Replace the initial depot-based route as soon as the first usable
+          // device position arrives, instead of waiting for the next poll.
+          fetchRoute(newLoc, true);
         }
       },
       (err) => {

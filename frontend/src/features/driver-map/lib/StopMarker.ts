@@ -91,7 +91,17 @@ export function getMarkerStyle(status: string, seq: number, isNext: boolean): Ma
  */
 export function filterVisibleStops(stops: RouteStop[]): RouteStop[] {
   if (!stops) return [];
-  return stops.filter((s) => (s.status || '').toUpperCase() !== 'REMOVED');
+  return stops.filter(
+    (s) =>
+      (s.status || '').toUpperCase() !== 'REMOVED' &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lng) &&
+      (s.lat !== 0 || s.lng !== 0) &&
+      s.lat >= -90 &&
+      s.lat <= 90 &&
+      s.lng >= -180 &&
+      s.lng <= 180
+  );
 }
 
 /**
@@ -135,7 +145,7 @@ export function createStopMarkerElement(
 
   container.appendChild(circle);
 
-  // Label beside marker: "Style Mall Outlet · OUT027"
+  // Label beside marker: "Keells - K-Zone Moratuwa · OUT027"
   const label = document.createElement('div');
   label.className = 'waypoint-stop-label';
   label.style.marginLeft = '8px';
@@ -206,6 +216,7 @@ export function createDriverMarkerElement(): HTMLElement {
   container.style.position = 'relative';
   container.style.width = '26px';
   container.style.height = '26px';
+  container.style.overflow = 'visible';
   container.setAttribute('aria-label', 'Your vehicle location');
 
   // Pulsing ring
@@ -234,6 +245,25 @@ export function createDriverMarkerElement(): HTMLElement {
 
   container.appendChild(pulse);
   container.appendChild(dot);
+
+  const label = document.createElement('div');
+  label.className = 'waypoint-driver-label';
+  label.style.position = 'absolute';
+  label.style.top = '31px';
+  label.style.left = '50%';
+  label.style.transform = 'translateX(-50%)';
+  label.style.padding = '4px 9px';
+  label.style.borderRadius = '10px';
+  label.style.backgroundColor = '#2563eb';
+  label.style.color = '#FFFFFF';
+  label.style.fontSize = '11px';
+  label.style.fontWeight = '800';
+  label.style.whiteSpace = 'nowrap';
+  label.style.boxShadow = '0 3px 10px rgba(37, 99, 235, 0.3)';
+  label.style.border = '2px solid #FFFFFF';
+  label.style.pointerEvents = 'none';
+  label.innerText = 'Your location';
+  container.appendChild(label);
 
   return container;
 }

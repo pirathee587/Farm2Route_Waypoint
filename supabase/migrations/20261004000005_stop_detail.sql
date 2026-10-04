@@ -7,7 +7,7 @@ COMMENT ON COLUMN public.outlets.dock_type IS 'Delivery dock requirement such as
 COMMENT ON COLUMN public.outlets.mall_window IS 'Human-readable mall/access restriction note.';
 
 UPDATE public.outlets
-SET name='Style Mall Outlet',district='Kandy',parking_constraint='van_only',dock_type='mall_bay',mall_window='Mall access window'
+SET name='Keells - K-Zone Moratuwa',district='Moratuwa',parking_constraint='van_only',dock_type='mall_bay',mall_window='Mall access window'
 WHERE outlet_id='OUT027';
 
 -- Base OUT027 order becomes Hanging Garments with the requested window.

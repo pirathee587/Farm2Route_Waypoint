@@ -41,6 +41,7 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
 
     // Tracking fitBounds triggers
     const hasInitialFittedRef = useRef<boolean>(false);
+    const hasFittedDriverRef = useRef<boolean>(false);
     const lastFittedNextStopIdRef = useRef<string | null>(null);
 
     const mapboxToken = (propToken !== undefined ? propToken : (import.meta.env.VITE_MAPBOX_TOKEN || '')).trim();
@@ -189,7 +190,11 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
     // 3. Update Depot Marker
     useEffect(() => {
       const map = mapRef.current;
-      if (!map || !routeData?.depot) return;
+      if (
+        !map ||
+        !routeData?.depot ||
+        (!routeData.depot.lat && !routeData.depot.lng)
+      ) return;
 
       const depot = routeData.depot;
       if (!depotMarkerRef.current) {
@@ -264,15 +269,22 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
       if (!map || !routeData) return;
 
       const currentNextStopId = routeData.next_stop?.stop_id || null;
+      const hasUsableDriverLocation = Boolean(
+        driverLocation &&
+        Number.isFinite(driverLocation.lat) &&
+        Number.isFinite(driverLocation.lng) &&
+        (driverLocation.lat !== 0 || driverLocation.lng !== 0)
+      );
       const shouldFit =
         !hasInitialFittedRef.current ||
+        (hasUsableDriverLocation && !hasFittedDriverRef.current) ||
         (currentNextStopId && currentNextStopId !== lastFittedNextStopIdRef.current);
 
       if (shouldFit) {
         const bounds = new mapboxgl.LngLatBounds();
 
         // 1. Depot
-        if (routeData.depot) {
+        if (routeData.depot && (routeData.depot.lat !== 0 || routeData.depot.lng !== 0)) {
           bounds.extend([routeData.depot.lng, routeData.depot.lat]);
         }
 
@@ -287,7 +299,7 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
         }
 
         // 3. Driver Location
-        if (driverLocation) {
+        if (hasUsableDriverLocation && driverLocation) {
           bounds.extend([driverLocation.lng, driverLocation.lat]);
         }
 
@@ -300,11 +312,12 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
 
         if (!bounds.isEmpty()) {
           map.fitBounds(bounds, {
-            padding: { top: 200, bottom: 320, left: 60, right: 60 },
-            maxZoom: 15,
+            padding: { top: 180, bottom: 210, left: 52, right: 52 },
+            maxZoom: 14.5,
             duration: hasInitialFittedRef.current ? 1200 : 0,
           });
           hasInitialFittedRef.current = true;
+          if (hasUsableDriverLocation) hasFittedDriverRef.current = true;
           lastFittedNextStopIdRef.current = currentNextStopId;
         }
       }

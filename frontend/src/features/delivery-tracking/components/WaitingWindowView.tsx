@@ -74,7 +74,7 @@ export const WaitingWindowView: React.FC<WaitingWindowViewProps> = ({
                 lineHeight: 1.4,
               }}
             >
-              Style Mall Outlet is not ready to receive this delivery yet.
+              Keells - K-Zone Moratuwa is not ready to receive this delivery yet.
             </p>
           </div>
         </div>
@@ -93,7 +93,7 @@ export const WaitingWindowView: React.FC<WaitingWindowViewProps> = ({
         >
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
-              Style Mall Outlet
+              Keells - K-Zone Moratuwa
             </div>
             <div
               style={{

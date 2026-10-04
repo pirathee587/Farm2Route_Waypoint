@@ -84,7 +84,7 @@ export const CantDeliverView: React.FC<CantDeliverViewProps> = ({
 
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
-              Style Mall Outlet
+              Keells - K-Zone Moratuwa
             </div>
             <div
               style={{
