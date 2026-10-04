@@ -17,8 +17,10 @@ import { MapPinOff, AlertTriangle } from 'lucide-react';
 
 export interface MapCanvasHandles {
   recenterOnDriver: () => void;
+  autoFocus: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
+  resize: () => void;
 }
 
 interface MapCanvasProps {
@@ -26,11 +28,12 @@ interface MapCanvasProps {
   fullGeometry: GeoJSONLineString | null;
   driverLocation: DriverGeoLocation | null;
   mapboxToken?: string;
+  isFullScreen?: boolean;
   onSelectStop?: (stopId: string) => void;
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
-  ({ routeData, fullGeometry, driverLocation, mapboxToken: propToken, onSelectStop }, ref) => {
+  ({ routeData, fullGeometry, driverLocation, mapboxToken: propToken, isFullScreen = false, onSelectStop }, ref) => {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -47,36 +50,127 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
     const mapboxToken = (propToken !== undefined ? propToken : (import.meta.env.VITE_MAPBOX_TOKEN || '')).trim();
     const isTokenMissing = !mapboxToken;
 
-    // Expose control handles to parent
-    useImperativeHandle(ref, () => ({
-      recenterOnDriver: () => {
-        if (!mapRef.current) return;
-        const targetLngLat = driverLocation
-          ? [driverLocation.lng, driverLocation.lat]
-          : routeData?.next_stop
-          ? [
-              routeData.stops.find((s) => s.stop_id === routeData.next_stop?.stop_id)?.lng ??
-                routeData.depot.lng,
-              routeData.stops.find((s) => s.stop_id === routeData.next_stop?.stop_id)?.lat ??
-                routeData.depot.lat,
-            ]
-          : routeData?.depot
-          ? [routeData.depot.lng, routeData.depot.lat]
-          : null;
+    const isValidCoordinate = (lng?: number | null, lat?: number | null): boolean => {
+      return Boolean(
+        lng !== undefined &&
+        lat !== undefined &&
+        Number.isFinite(lng) &&
+        Number.isFinite(lat) &&
+        (lng !== 0 || lat !== 0) &&
+        Math.abs(lat!) <= 90 &&
+        Math.abs(lng!) <= 180
+      );
+    };
 
-        if (targetLngLat) {
-          mapRef.current.flyTo({
-            center: targetLngLat as [number, number],
+    const fitDriverAndTarget = (animated: boolean = true) => {
+      const map = mapRef.current;
+      if (!map || !routeData) return;
+
+      const nextStopId = routeData.next_stop?.stop_id;
+      const targetStop =
+        (nextStopId ? routeData.stops?.find((s) => s.stop_id === nextStopId) : null) ||
+        routeData.stops?.find((s) => {
+          const st = (s.status || '').toUpperCase();
+          return st === 'IN_PROGRESS' || st === 'ARRIVED' || st === 'PENDING' || st === 'WAITING_FOR_WINDOW';
+        }) ||
+        routeData.stops?.find((s) => isValidCoordinate(s.lng, s.lat));
+
+      const hasDriver = isValidCoordinate(driverLocation?.lng, driverLocation?.lat);
+      const hasTarget = targetStop && isValidCoordinate(targetStop.lng, targetStop.lat);
+
+      // Case 1: Both Driver Location and Target Arrival Stop exist!
+      // Core requirement: Auto focus both driver current location AND destination arrival stop
+      if (hasDriver && hasTarget && driverLocation && targetStop) {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([driverLocation.lng, driverLocation.lat]);
+        bounds.extend([targetStop.lng, targetStop.lat]);
+
+        // Optional: Include nearby points of active route leg
+        if (routeData.route_geometry?.coordinates?.length) {
+          const minLng = Math.min(driverLocation.lng, targetStop.lng) - 0.08;
+          const maxLng = Math.max(driverLocation.lng, targetStop.lng) + 0.08;
+          const minLat = Math.min(driverLocation.lat, targetStop.lat) - 0.08;
+          const maxLat = Math.max(driverLocation.lat, targetStop.lat) + 0.08;
+
+          routeData.route_geometry.coordinates.forEach(([lng, lat]) => {
+            if (isValidCoordinate(lng, lat)) {
+              if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
+                bounds.extend([lng, lat]);
+              }
+            }
+          });
+        }
+
+        map.fitBounds(bounds, {
+          padding: isFullScreen
+            ? { top: 90, bottom: 90, left: 60, right: 60 }
+            : { top: 170, bottom: 220, left: 60, right: 60 },
+          maxZoom: 15.5,
+          duration: animated ? 1100 : 0,
+        });
+        return;
+      }
+
+      // Case 2: Only Driver Location is known
+      if (hasDriver && driverLocation) {
+        const hasDepot = isValidCoordinate(routeData.depot?.lng, routeData.depot?.lat);
+        if (hasDepot && routeData.depot) {
+          const bounds = new mapboxgl.LngLatBounds();
+          bounds.extend([driverLocation.lng, driverLocation.lat]);
+          bounds.extend([routeData.depot.lng, routeData.depot.lat]);
+          map.fitBounds(bounds, {
+            padding: isFullScreen
+              ? { top: 90, bottom: 90, left: 60, right: 60 }
+              : { top: 170, bottom: 220, left: 60, right: 60 },
+            maxZoom: 15.5,
+            duration: animated ? 1000 : 0,
+          });
+        } else {
+          map.flyTo({
+            center: [driverLocation.lng, driverLocation.lat],
             zoom: 14.5,
             essential: true,
           });
         }
+        return;
+      }
+
+      // Case 3: Only Target Arrival Stop is known
+      if (hasTarget && targetStop) {
+        map.flyTo({
+          center: [targetStop.lng, targetStop.lat],
+          zoom: 14.5,
+          essential: true,
+        });
+        return;
+      }
+
+      // Case 4: Fallback to Depot
+      if (isValidCoordinate(routeData.depot?.lng, routeData.depot?.lat)) {
+        map.flyTo({
+          center: [routeData.depot.lng, routeData.depot.lat],
+          zoom: 13,
+          essential: true,
+        });
+      }
+    };
+
+    // Expose control handles to parent
+    useImperativeHandle(ref, () => ({
+      recenterOnDriver: () => {
+        fitDriverAndTarget(true);
+      },
+      autoFocus: () => {
+        fitDriverAndTarget(true);
       },
       zoomIn: () => {
         mapRef.current?.zoomIn();
       },
       zoomOut: () => {
         mapRef.current?.zoomOut();
+      },
+      resize: () => {
+        mapRef.current?.resize();
       },
     }));
 
@@ -150,6 +244,12 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
             'line-width': 5,
           },
         });
+
+        // Initial auto-focus on driver + arrival target stop as soon as map finishes loading
+        setTimeout(() => {
+          map.resize();
+          fitDriverAndTarget(false);
+        }, 100);
       });
 
       // Cleanup on unmount: remove markers and map
@@ -263,18 +363,14 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
       });
     }, [routeData?.stops, routeData?.next_stop, onSelectStop]);
 
-    // 6. Camera Bounds Management: FitBounds on first load or next stop change
+    // 6. Camera Bounds Management: Auto focus driver and arrival target stop
     useEffect(() => {
       const map = mapRef.current;
       if (!map || !routeData) return;
 
       const currentNextStopId = routeData.next_stop?.stop_id || null;
-      const hasUsableDriverLocation = Boolean(
-        driverLocation &&
-        Number.isFinite(driverLocation.lat) &&
-        Number.isFinite(driverLocation.lng) &&
-        (driverLocation.lat !== 0 || driverLocation.lng !== 0)
-      );
+      const hasUsableDriverLocation = isValidCoordinate(driverLocation?.lng, driverLocation?.lat);
+
       const shouldFit =
         !hasInitialFittedRef.current ||
         (hasUsableDriverLocation && !hasFittedDriverRef.current) ||
@@ -322,6 +418,17 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
         }
       }
     }, [routeData, driverLocation]);
+
+    // Handle isFullScreen toggle resize and autoFocus
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      const t = setTimeout(() => {
+        map.resize();
+        fitDriverAndTarget(true);
+      }, 150);
+      return () => clearTimeout(t);
+    }, [isFullScreen]);
 
     // Token Missing Friendly State
     if (isTokenMissing) {
@@ -385,7 +492,7 @@ export const MapCanvas = forwardRef<MapCanvasHandles, MapCanvasProps>(
         style={{
           width: '100%',
           height: '100%',
-          minHeight: '520px',
+          minHeight: isFullScreen ? '100vh' : '520px',
           position: 'relative',
         }}
       />

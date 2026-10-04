@@ -354,6 +354,35 @@ describe('Driver Route Map Tests', () => {
       screen.getByLabelText('Zoom out on map').click();
       expect(onZoomOut).toHaveBeenCalledTimes(1);
     });
+
+    it('toggles full screen mode via onToggleFullScreen', () => {
+      const onToggle = vi.fn();
+      const { rerender } = render(
+        <MapControls
+          onLocate={vi.fn()}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          onToggleFullScreen={onToggle}
+          isFullScreen={false}
+        />
+      );
+
+      const btn = screen.getByLabelText('View full screen map');
+      expect(btn).toBeDefined();
+      btn.click();
+      expect(onToggle).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <MapControls
+          onLocate={vi.fn()}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          onToggleFullScreen={onToggle}
+          isFullScreen={true}
+        />
+      );
+      expect(screen.getByLabelText('Exit full screen')).toBeDefined();
+    });
   });
 
   // 10. Geo calculation and coordinate rounding

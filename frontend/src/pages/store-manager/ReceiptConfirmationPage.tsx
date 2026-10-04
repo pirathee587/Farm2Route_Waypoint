@@ -174,11 +174,13 @@ export function ReceiptConfirmationPage() {
             <div>
               <dt>Requested date</dt>
               <dd>
-                {new Intl.DateTimeFormat('en', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                }).format(new Date(`${order.requested_delivery_date}T00:00:00`))}
+                {order.requested_delivery_date
+                  ? new Intl.DateTimeFormat('en', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  }).format(new Date(`${order.requested_delivery_date}T00:00:00`))
+                  : 'Not scheduled'}
               </dd>
             </div>
             <div>

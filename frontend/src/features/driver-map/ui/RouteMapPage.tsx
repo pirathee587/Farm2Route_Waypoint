@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useRouteMap } from '../model/useRouteMap';
 import { MapCanvas, MapCanvasHandles } from './MapCanvas';
 import { NextStopCard } from './NextStopCard';
@@ -31,12 +31,63 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
   } = useRouteMap();
 
   const mapCanvasRef = useRef<MapCanvasHandles | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
 
   const handleSelectStop = (stopId: string) => {
     if (onViewStop) {
       onViewStop(stopId);
     }
   };
+
+  const handleToggleFullScreen = () => {
+    setIsFullScreen((prev) => {
+      const next = !prev;
+      if (next) {
+        try {
+          if (containerRef.current?.requestFullscreen) {
+            containerRef.current.requestFullscreen().catch(() => {});
+          }
+        } catch {}
+      } else {
+        try {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+          }
+        } catch {}
+      }
+      return next;
+    });
+  };
+
+  // Sync fullscreen change from native browser / Escape key
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && isFullScreen) {
+        setIsFullScreen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullScreen) {
+        setIsFullScreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullScreen]);
+
+  // Window resize listener to keep Mapbox canvas responsive
+  useEffect(() => {
+    const handleResize = () => {
+      mapCanvasRef.current?.resize();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const currentTripNumber = routeData?.trip_number ?? 1;
   const currentVehicleId = routeData?.vehicle_id ?? 'VEH014';
@@ -47,16 +98,36 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
 
   return (
     <div
-      className="driver-screen-content animate-fade-in"
-      style={{
-        padding: '16px 0 0 0',
-        overflow: 'hidden',
-        height: '100%',
-        minHeight: '100vh',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
+      ref={containerRef}
+      className={`driver-screen-content animate-fade-in ${isFullScreen ? 'waypoint-map-fullscreen-active' : ''}`}
+      style={
+        isFullScreen
+          ? {
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 99999,
+              backgroundColor: '#0f172a',
+              margin: 0,
+              padding: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }
+          : {
+              padding: '16px 0 0 0',
+              overflow: 'hidden',
+              height: '100%',
+              minHeight: '100vh',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+            }
+      }
     >
       {/* Route Updated Floating Toast */}
       {routeUpdatedToast && (
@@ -65,7 +136,7 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
           aria-live="polite"
           style={{
             position: 'absolute',
-            top: 80,
+            top: isFullScreen ? 20 : 80,
             left: 20,
             right: 20,
             zIndex: 9999,
@@ -88,78 +159,80 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
         </div>
       )}
 
-      {/* Screen Header */}
-      <div style={{ padding: '0 20px', marginBottom: 10, flexShrink: 0, zIndex: 10 }}>
-        <h1
-          style={{
-            fontSize: 24,
-            fontWeight: 800,
-            color: '#0f172a',
-            margin: 0,
-            letterSpacing: '-0.4px',
-          }}
-        >
-          Route Map
-        </h1>
-        <div
-          style={{
-            fontSize: 13,
-            color: '#64748b',
-            fontWeight: 600,
-            marginTop: 2,
-          }}
-        >
-          Trip {currentTripNumber} • {currentVehicleId}
-        </div>
+      {/* Screen Header (Hidden in Full Screen Mode for Clean View) */}
+      {!isFullScreen && (
+        <div style={{ padding: '0 20px', marginBottom: 10, flexShrink: 0, zIndex: 10 }}>
+          <h1
+            style={{
+              fontSize: 24,
+              fontWeight: 800,
+              color: '#0f172a',
+              margin: 0,
+              letterSpacing: '-0.4px',
+            }}
+          >
+            Route Map
+          </h1>
+          <div
+            style={{
+              fontSize: 13,
+              color: '#64748b',
+              fontWeight: 600,
+              marginTop: 2,
+            }}
+          >
+            Trip {currentTripNumber} • {currentVehicleId}
+          </div>
 
-        {/* Trip Tabs Switcher (Trip 1 / Trip 2) */}
-        <div
-          role="tablist"
-          aria-label="Trip selector"
-          style={{
-            display: 'inline-flex',
-            backgroundColor: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: 4,
-            marginTop: 10,
-            width: 210,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          {tripTabs.map((tab) => {
-            const isActive = tab.trip_number === currentTripNumber;
-            return (
-              <button
-                key={tab.trip_number}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => {
-                  if (tab.trip_id) {
-                    setTripId(tab.trip_id);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: '6px 0',
-                  borderRadius: 10,
-                  backgroundColor: isActive ? '#facc15' : 'transparent',
-                  color: isActive ? '#0f172a' : '#64748b',
-                  fontWeight: 800,
-                  fontSize: 13,
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  minHeight: 34,
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+          {/* Trip Tabs Switcher (Trip 1 / Trip 2) */}
+          <div
+            role="tablist"
+            aria-label="Trip selector"
+            style={{
+              display: 'inline-flex',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 14,
+              padding: 4,
+              marginTop: 10,
+              width: 210,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}
+          >
+            {tripTabs.map((tab) => {
+              const isActive = tab.trip_number === currentTripNumber;
+              return (
+                <button
+                  key={tab.trip_number}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => {
+                    if (tab.trip_id) {
+                      setTripId(tab.trip_id);
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 0',
+                    borderRadius: 10,
+                    backgroundColor: isActive ? '#facc15' : 'transparent',
+                    color: isActive ? '#0f172a' : '#64748b',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    minHeight: 34,
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Map Area */}
       <div
@@ -167,6 +240,7 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
           position: 'relative',
           flex: 1,
           width: '100%',
+          height: isFullScreen ? '100vh' : '100%',
           overflow: 'hidden',
           backgroundColor: '#e2e8f0',
         }}
@@ -260,11 +334,13 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
           onViewSummary={onViewSummary}
         />
 
-        {/* Floating Right Map Controls (Locate, Zoom +, Zoom -) */}
+        {/* Floating Right Map Controls (Locate/AutoFocus, Zoom +, Zoom -, Fullscreen) */}
         <MapControls
           onLocate={() => mapCanvasRef.current?.recenterOnDriver()}
           onZoomIn={() => mapCanvasRef.current?.zoomIn()}
           onZoomOut={() => mapCanvasRef.current?.zoomOut()}
+          onToggleFullScreen={handleToggleFullScreen}
+          isFullScreen={isFullScreen}
         />
 
         {/* Mapbox Map Canvas */}
@@ -273,6 +349,7 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
           routeData={routeData}
           fullGeometry={fullGeometry}
           driverLocation={driverLocation}
+          isFullScreen={isFullScreen}
           onSelectStop={handleSelectStop}
         />
 
@@ -281,6 +358,7 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
           nextStop={routeData?.next_stop ?? null}
           stops={routeData?.stops || []}
           progress={routeData?.progress || { completed: 0, total: 0 }}
+          isFullScreen={isFullScreen}
           onViewStop={(stopId) => handleSelectStop(stopId)}
           onViewSummary={onViewSummary}
         />

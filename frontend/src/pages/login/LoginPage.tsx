@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, LogOut } from 'lucide-react';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
+import { authSession } from '@/features/auth/authSession';
 import type { AuthUser } from '@/features/auth/authApi';
 
 export const LoginPage: React.FC = () => {
@@ -18,17 +20,23 @@ export const LoginPage: React.FC = () => {
   }, []);
 
   const handleLoginSuccess = (user: AuthUser) => {
-    if (user.role === 'STORE_MANAGER') {
-      window.location.assign('/store-manager');
-    } else if (user.role === 'DISPATCHER' || user.role === 'ADMIN') {
-      window.location.assign('/dispatcher/dashboard');
-    } else if (user.role === 'DRIVER') {
-      window.location.assign('/driver');
-    } else if (user.role === 'LOADER') {
-      window.location.assign('/loader');
-    } else {
-      setLoggedInUser({ email: user.email, role: user.role });
+    if (user?.role === 'STORE_MANAGER') {
+      navigate('/store-manager');
+      return;
     }
+    if (sessionUser?.role === 'DRIVER') {
+      window.location.assign('/driver');
+      return;
+    }
+    if (sessionUser?.role === 'LOADER') {
+      window.location.assign('/loader');
+      return;
+    }
+    if (sessionUser?.role === 'DISPATCHER' || sessionUser?.role === 'ADMIN') {
+      window.location.assign('/dispatcher/dashboard');
+      return;
+    }
+    setLoggedInUser({ email: user.email, role: user.role });
   };
 
   return (

@@ -21,6 +21,7 @@ interface StopBottomSheetProps {
   progress: RouteProgress;
   onViewStop: (stopId: string) => void;
   onViewSummary?: () => void;
+  isFullScreen?: boolean;
 }
 
 export const StopBottomSheet: React.FC<StopBottomSheetProps> = ({
@@ -29,6 +30,7 @@ export const StopBottomSheet: React.FC<StopBottomSheetProps> = ({
   progress,
   onViewStop,
   onViewSummary,
+  isFullScreen = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [showAllStopsModal, setShowAllStopsModal] = useState<boolean>(false);
@@ -43,7 +45,7 @@ export const StopBottomSheet: React.FC<StopBottomSheetProps> = ({
         className="waypoint-bottom-sheet"
         style={{
           position: 'absolute',
-          bottom: 72, // Above bottom tab bar
+          bottom: isFullScreen ? 0 : 72, // Above bottom tab bar unless fullscreen
           left: 0,
           right: 0,
           backgroundColor: '#FFFFFF',
@@ -115,7 +117,7 @@ export const StopBottomSheet: React.FC<StopBottomSheetProps> = ({
         className="waypoint-bottom-sheet"
         style={{
           position: 'absolute',
-          bottom: 70, // Sits above bottom tab bar
+          bottom: isFullScreen ? 0 : 70, // Sits above bottom tab bar unless fullscreen
           left: 0,
           right: 0,
           backgroundColor: '#FFFFFF',
