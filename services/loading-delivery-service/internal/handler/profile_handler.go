@@ -25,6 +25,19 @@ func (h *ProfileHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		model.ErrBadRequest("invalid request body").WriteJSON(w)
 		return
 	}
+
+	func (h *ProfileHandler) Location(w http.ResponseWriter, r *http.Request) {
+		var request model.LocationUpdateRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			model.ErrBadRequest("invalid request body").WriteJSON(w)
+			return
+		}
+		user, _ := middleware.GetUserFromContext(r.Context())
+		response, err := h.service.Location(r.Context(), user.UserID, request)
+		writeDriverResponse(w, response, err)
+	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		model.ErrBadRequest("request body must contain one JSON object").WriteJSON(w)

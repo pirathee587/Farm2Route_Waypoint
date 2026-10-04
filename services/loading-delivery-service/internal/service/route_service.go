@@ -49,7 +49,11 @@ func (s *RouteService) Route(ctx context.Context, driverID, tripID uuid.UUID, cu
 	stops, next, progress := deriveRouteStops(data.Stops)
 	origin := model.Coordinate{Lat: data.Depot.Lat, Lng: data.Depot.Lng}
 	fromDepot := true
-	if current != nil {
+	// Browsers running on a developer machine can report a real GPS position
+	// thousands of kilometres away from the assigned Sri Lankan trip. Using it
+	// produces an ocean-spanning line and meaningless distance/ETA values. Only
+	// use device GPS when it is plausibly within the trip's operating area.
+	if current != nil && validCoordinate(*current) && (!validCoordinate(origin) || haversine(origin, *current) <= 250) {
 		origin = *current
 		fromDepot = false
 	} else {
@@ -97,10 +101,17 @@ func (s *RouteService) Geometry(ctx context.Context, driverID, tripID uuid.UUID)
 		return nil, err
 	}
 	stops, _, _ := deriveRouteStops(data.Stops)
-	points := []model.Coordinate{{Lat: data.Depot.Lat, Lng: data.Depot.Lng}}
-	statusParts := []string{"depot"}
+	points := []model.Coordinate{}
+	statusParts := []string{}
+	depotCoordinate := model.Coordinate{Lat: data.Depot.Lat, Lng: data.Depot.Lng}
+	if validCoordinate(depotCoordinate) {
+		points = append(points, depotCoordinate)
+		statusParts = append(statusParts, "depot")
+	}
 	for _, stop := range stops {
-		if !routeCompleted(stop.Status) {
+		// A missing database coordinate is returned as 0,0 by the repository.
+		// Never send it to Mapbox: it expands the route across the globe.
+		if !routeCompleted(stop.Status) && validCoordinate(model.Coordinate{Lat: stop.Lat, Lng: stop.Lng}) {
 			points = append(points, model.Coordinate{Lat: stop.Lat, Lng: stop.Lng})
 			statusParts = append(statusParts, stop.Status)
 		}
@@ -258,6 +269,9 @@ func haversine(a, b model.Coordinate) float64 {
 	dLng := (b.Lng - a.Lng) * math.Pi / 180
 	x := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(a.Lat*math.Pi/180)*math.Cos(b.Lat*math.Pi/180)*math.Sin(dLng/2)*math.Sin(dLng/2)
 	return earth * 2 * math.Atan2(math.Sqrt(x), math.Sqrt(1-x))
+}
+func validCoordinate(c model.Coordinate) bool {
+	return c.Lat >= -90 && c.Lat <= 90 && c.Lng >= -180 && c.Lng <= 180 && (c.Lat != 0 || c.Lng != 0)
 }
 func ParseCoordinate(latValue, lngValue string) (*model.Coordinate, error) {
 	if latValue == "" && lngValue == "" {

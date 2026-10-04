@@ -207,7 +207,7 @@ export const StopBottomSheet: React.FC<StopBottomSheetProps> = ({
                 letterSpacing: '0.4px',
               }}
             >
-              IN PROGRESS
+              {(nextStop.status || 'IN_PROGRESS').replaceAll('_', ' ')}
             </span>
           </div>
 

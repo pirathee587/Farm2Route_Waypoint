@@ -791,7 +791,7 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
             </div>
           </div>
 
-          {/* Stop 3 - Style Mall Outlet (Pending) */}
+          {/* Stop 3 - Keells - K-Zone Moratuwa (Pending) */}
           <div
             onClick={() => onSelectStop('stop-3')}
             style={{
@@ -838,7 +838,7 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
                     color: '#0f172a',
                   }}
                 >
-                  Style Mall Outlet
+                  Keells - K-Zone Moratuwa
                 </div>
               </div>
 

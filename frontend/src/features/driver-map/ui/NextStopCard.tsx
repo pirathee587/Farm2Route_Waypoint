@@ -202,7 +202,7 @@ export const NextStopCard: React.FC<NextStopCardProps> = ({
               letterSpacing: '0.3px',
             }}
           >
-            IN PROGRESS
+            {(nextStop.status || 'IN_PROGRESS').replaceAll('_', ' ')}
           </span>
         </div>
       </div>

@@ -177,7 +177,7 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Navigate replace to={authSession.get()?.user.role === 'STORE_MANAGER' ? '/store-manager' : '/login'} />} path="/" />
+        <Route element={<Navigate replace to={currentUser?.role === 'STORE_MANAGER' ? '/store-manager' : '/login'} />} path="/" />
         <Route element={<LoginPage />} path="/login" />
         <Route element={<StoreManagerRouteGuard />} path="/store-manager">
           <Route element={<StoreManagerLayout />}>

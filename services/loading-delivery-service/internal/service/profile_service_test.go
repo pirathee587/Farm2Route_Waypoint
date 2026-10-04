@@ -24,6 +24,9 @@ func (f *fakeProfileRepo) Heartbeat(_ context.Context, _ uuid.UUID, at time.Time
 	f.heartbeatAt = at
 	return f.heartbeatErr
 }
+func (f *fakeProfileRepo) Location(context.Context, uuid.UUID, model.LocationUpdateRequest, time.Time) error {
+	return nil
+}
 func (f *fakeProfileRepo) History(_ context.Context, id uuid.UUID, _ time.Time, _ time.Time, _, _ int) ([]model.HistoryTrip, int, error) {
 	f.historyOwner = id
 	return f.history, len(f.history), nil

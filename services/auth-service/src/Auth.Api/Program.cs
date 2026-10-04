@@ -67,6 +67,7 @@ using (var scope = app.Services.CreateScope())
     catch
     {
     }
+
     try
     {
         await DataSeeder.SeedAsync(context);
