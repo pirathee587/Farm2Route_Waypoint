@@ -112,10 +112,8 @@ export const DeferredOrdersPage: React.FC<Props> = ({ onNavigateGlobal }) => {
         newDate,
         reasonForChange,
       });
-      if (res.success) {
-        setOrders(prev => prev.map(o => o.id === res.updatedOrder.id ? res.updatedOrder : o));
-        setChangeDateOpen(false);
-      }
+      setOrders(prev => prev.map(o => o.id === res.id ? res : o));
+      setChangeDateOpen(false);
     } catch (err: unknown) {
       setChangeDateError((err as Error).message || 'Failed to update date. Please try again.');
     } finally {

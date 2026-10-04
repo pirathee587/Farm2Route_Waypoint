@@ -10,10 +10,14 @@ import {
   validateTrip, 
   confirmTrip,
   savePlanningDraft,
-  getSavedPlanningDraft,
+  fetchPlanningOrders,
+  addOrderToTrip,
+  removeOrderFromTrip,
+  assignTripVehicle,
+  updateTripDepot,
+  updateTripStops,
 } from '@/features/planning-allocation/routePlanningApi';
 import type { PlanningSummary, VehicleCandidate, DraftTrip } from '@/entities/planning/planningTypes';
-import { getDevelopmentOrders } from '@/features/order-management/ordersApi';
 import type { QueueOrder } from '@/entities/order/orderTypes';
 import { Check } from 'lucide-react';
 
@@ -42,16 +46,18 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     let mounted = true;
     const loadData = async () => {
       setLoading(true);
-      const [sum, vehs] = await Promise.all([
+      try {
+      const [sum, vehs, orders] = await Promise.all([
         fetchPlanningSummary(),
-        fetchAvailableVehicles()
+        fetchAvailableVehicles(),
+        fetchPlanningOrders(),
       ]);
       if (!mounted) return;
       setSummary(sum);
       setVehicles(vehs);
       
       // Include both Unplanned and Deferred orders so dispatchers can plan all
-      const initialOrders = getDevelopmentOrders().filter(o => o.status === 'Unplanned');
+      const initialOrders = orders;
       setUnplannedOrders(initialOrders);
       
       if (selectedOrders && selectedOrders.length > 0) {
@@ -62,13 +68,8 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
           setUnplannedOrders(prev => prev.filter(o => !selectedOrders.find(so => so.id === o.id)));
           setGenerating(false);
         }
-      } else {
-        const saved = getSavedPlanningDraft();
-        if (saved) {
-          setDraft(saved);
-          setUnplannedOrders(prev => prev.filter(order => !saved.stops.some(stop => stop.order.id === order.id)));
-        }
       }
+      } catch (error) { if (mounted) setActionError(error instanceof Error ? error.message : 'Unable to load planning data.'); }
       setLoading(false);
     };
     loadData();
@@ -84,39 +85,13 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     setActionError(null);
     // Suggest a plan for the top 3 orders
     const toPlan = unplannedOrders.slice(0, 3);
-    const plan = await generateSuggestedPlan(toPlan);
-    setDraft(plan);
-    setUnplannedOrders(prev => prev.filter(o => !toPlan.find(to => to.id === o.id)));
-    setGenerating(false);
+    try { const plan = await generateSuggestedPlan(toPlan); setDraft(plan); setUnplannedOrders(prev => prev.filter(o => !toPlan.find(to => to.id === o.id))); }
+    catch(error){setActionError(error instanceof Error?error.message:'Unable to generate plan.');} finally { setGenerating(false); }
   };
 
   const handleAddOrder = async (order: QueueOrder) => {
-    if (!draft) {
-      // Create a new empty draft with first vehicle
-      const stops = [{ id: `stop-${Date.now()}`, sequence: 1, order }];
-      const vehicle = vehicles[0];
-      const depot = order.routeArea.toLowerCase().startsWith('kandy') ? 'Kandy' : 'Peliyagoda';
-      const validation = await validateTrip(vehicle, stops, depot);
-      setDraft({
-        id: `TRIP-${Date.now().toString().slice(-6)}`,
-        status: 'DRAFT',
-        depot,
-        vehicle,
-        stops,
-        validation,
-        distanceKm: 25,
-        estDurationMins: 45
-      });
-    } else {
-      const stops = [...draft.stops, { id: `stop-${Date.now()}`, sequence: draft.stops.length + 1, order }];
-      const validation = await validateTrip(draft.vehicle, stops);
-      setDraft({
-        ...draft,
-        stops,
-        validation,
-      });
-    }
-    setUnplannedOrders(prev => prev.filter(o => o.id !== order.id));
+    try { const next = draft ? await addOrderToTrip(draft,order) : await generateSuggestedPlan([order]); setDraft(next); setUnplannedOrders(prev=>prev.filter(o=>o.id!==order.id)); }
+    catch(error){setActionError(error instanceof Error?error.message:'Unable to add order.');}
   };
 
   const handleRemoveStop = async (stopId: string) => {
@@ -125,9 +100,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     if (removedStop) {
       setUnplannedOrders(prev => [...prev, removedStop.order]);
     }
-    const stops = draft.stops.filter(s => s.id !== stopId).map((s, idx) => ({ ...s, sequence: idx + 1 }));
-    const validation = await validateTrip(draft.vehicle, stops, draft.depot);
-    setDraft({ ...draft, stops, validation });
+    try { setDraft(await removeOrderFromTrip(draft,removedStop!.order.id)); } catch(error){setActionError(error instanceof Error?error.message:'Unable to remove order.');}
   };
 
   const handleReorderStop = async (stopId: string, direction: 'up' | 'down') => {
@@ -142,21 +115,17 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
       [newStops[idx], newStops[idx + 1]] = [newStops[idx + 1], newStops[idx]];
     }
     
-    const updatedStops = newStops.map((s, i) => ({ ...s, sequence: i + 1 }));
-    const validation = await validateTrip(draft.vehicle, updatedStops, draft.depot);
-    setDraft({ ...draft, stops: updatedStops, validation });
+    try { setDraft(await updateTripStops(draft,newStops.map(s=>s.order.id))); } catch(error){setActionError(error instanceof Error?error.message:'Unable to reorder stops.');}
   };
 
   const handleChangeVehicle = async (vehicle: VehicleCandidate) => {
     if (!draft) return;
-    const validation = await validateTrip(vehicle, draft.stops, draft.depot);
-    setDraft({ ...draft, vehicle, validation });
+    try { setDraft(await assignTripVehicle(draft,vehicle)); } catch(error){setActionError(error instanceof Error?error.message:'Unable to assign vehicle.');}
   };
 
   const handleChangeDepot = async (depot: string) => {
     if (!draft) return;
-    const validation = await validateTrip(draft.vehicle, draft.stops, depot);
-    setDraft({ ...draft, depot, validation });
+    try { setDraft(await updateTripDepot(draft,depot)); } catch(error){setActionError(error instanceof Error?error.message:'Unable to change depot.');}
   };
 
   const handleChangeDriver = (driverName: string) => {
@@ -174,8 +143,11 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     if (!draft || !draft.validation?.feasible) return;
     setActionError(null);
     try {
-      const res = await confirmTrip(draft);
+      const validated = await validateTrip(draft);
+      setDraft(validated);
+      const res = await confirmTrip(validated);
       if (res.success) {
+        setDraft(res.trip);
         setShowConfirmModal(false);
         setShowSuccessModal(true);
       } else setActionError('The plan is no longer feasible. Review its constraints.');
@@ -189,9 +161,8 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
       setActionError('Build a trip before saving a draft.');
       return;
     }
-    await savePlanningDraft(draft);
-    setDraftSaved(true);
-    setActionError(null);
+    try { setDraft(await savePlanningDraft(draft)); setDraftSaved(true); setActionError(null); }
+    catch(error){setActionError(error instanceof Error?error.message:'Unable to save draft.');}
   };
 
   return (

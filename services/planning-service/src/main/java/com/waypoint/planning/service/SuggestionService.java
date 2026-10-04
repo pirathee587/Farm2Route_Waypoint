@@ -3,13 +3,14 @@ package com.waypoint.planning.service;
 import com.waypoint.planning.constraint.ConstraintEngine;
 import com.waypoint.planning.model.PlanningModels.*;
 import com.waypoint.planning.repository.*;
+import com.waypoint.planning.port.PlanningMasterDataPort;
 import org.springframework.stereotype.Service;
 import java.time.*;import java.util.*;
 
 @Service
 public class SuggestionService {
-    private final ReferenceRepository refs; private final PlanningRepository repo; private final ConstraintEngine engine;
-    public SuggestionService(ReferenceRepository refs,PlanningRepository repo,ConstraintEngine engine){this.refs=refs;this.repo=repo;this.engine=engine;}
+    private final PlanningMasterDataPort refs; private final PlanningRepository repo; private final ConstraintEngine engine;
+    public SuggestionService(PlanningMasterDataPort refs,PlanningRepository repo,ConstraintEngine engine){this.refs=refs;this.repo=repo;this.engine=engine;}
     public SuggestionResponse suggest(LocalDate date){
         Set<UUID> allocated=new HashSet<>(repo.allocatedOrderIds(date));Set<UUID> deferred=new HashSet<>(repo.deferredOrderIds(date));
         List<OrderRef> remaining=new ArrayList<>(refs.listPlanningOrders(date).stream().filter(o->!allocated.contains(o.orderId())&&!deferred.contains(o.orderId())).toList());

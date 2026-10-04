@@ -28,7 +28,7 @@ export const CapacityShortfallPage: React.FC<CapacityShortfallPageProps> = ({
   onBackToPlanning,
 }) => {
   const [data, setData] = useState<CapacityShortfallData | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string>('ORD-0925-027');
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export const CapacityShortfallPage: React.FC<CapacityShortfallPageProps> = ({
     let active = true;
     setLoading(true);
     setError(null);
-    fetchCapacityShortfallData(tripId).then((res) => {
+    fetchCapacityShortfallData().then((res) => {
       if (active) {
         setData(res);
         if (res.affectedOrders.length > 0) {
