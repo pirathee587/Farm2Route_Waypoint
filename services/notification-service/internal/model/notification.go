@@ -30,6 +30,7 @@ const (
 	EventTypeDeliveryCompleted   = "DELIVERY_COMPLETED"
 	EventTypeFlagRaised          = "FLAG_RAISED"
 	EventTypeSystem              = "SYSTEM"
+	EventTypeDriverNotification  = "DRIVER_NOTIFICATION_PUSH"
 )
 
 // ─── Target Roles ─────────────────────────────────────────────────────────────
@@ -75,19 +76,19 @@ type OrderDeferredEvent struct {
 
 // AllocationCompletedEvent is published when a trip allocation is finalized.
 type AllocationCompletedEvent struct {
-	TripID       string `json:"trip_id"`
-	TripCode     string `json:"trip_code"`
-	Destination  string `json:"destination"`
-	StopCount    int    `json:"stop_count"`
-	AllocatedAt  string `json:"allocated_at"`
+	TripID      string `json:"trip_id"`
+	TripCode    string `json:"trip_code"`
+	Destination string `json:"destination"`
+	StopCount   int    `json:"stop_count"`
+	AllocatedAt string `json:"allocated_at"`
 }
 
 // DeliveryCompletedEvent is published by the loading service when delivery finishes.
 type DeliveryCompletedEvent struct {
-	TripID       string `json:"trip_id"`
-	TripCode     string `json:"trip_code"`
-	Destination  string `json:"destination"`
-	CompletedAt  string `json:"completed_at"`
+	TripID      string `json:"trip_id"`
+	TripCode    string `json:"trip_code"`
+	Destination string `json:"destination"`
+	CompletedAt string `json:"completed_at"`
 }
 
 // ─── REST API models ──────────────────────────────────────────────────────────

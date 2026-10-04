@@ -22,6 +22,7 @@ func NewPostgresPool(ctx context.Context, cfg config.DatabaseConfig) (*PostgresD
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse database config: %w", err)
 	}
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	poolCfg.MaxConns = int32(cfg.MaxOpenConns)
 	poolCfg.MinConns = int32(cfg.MaxIdleConns)

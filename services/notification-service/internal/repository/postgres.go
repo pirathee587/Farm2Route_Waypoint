@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,6 +32,7 @@ func NewPostgresPool(ctx context.Context, cfg DatabaseConfig) (*PostgresPool, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database DSN: %w", err)
 	}
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	poolCfg.MaxConnLifetime = cfg.MaxLifetimeDuration()
 

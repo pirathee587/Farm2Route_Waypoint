@@ -8,9 +8,6 @@ public static class DataSeeder
 {
     public static async Task SeedAsync(AuthDbContext context)
     {
-        if (context.Users.Any())
-            return; // Already seeded
-
         var defaultPassword = BCrypt.Net.BCrypt.HashPassword("Waypoint@2026", 12);
 
         var dispatcher = new User
@@ -67,7 +64,31 @@ public static class DataSeeder
             }
         };
 
-        context.Users.AddRange(dispatcher, loader, driver, storeManager);
-        await context.SaveChangesAsync();
+        var drv014 = new User
+        {
+            Id = Guid.Parse("22222222-2222-2222-2222-222222222214"),
+            Email = "drv014@waypoint.lk",
+            PasswordHash = defaultPassword,
+            Role = UserRole.DRIVER,
+            DriverProfile = new DriverProfile
+            {
+                FullName = "Driver DRV014",
+                Depot = "Peliyagoda",
+                VehicleId = "VEH014",
+                LicenseNumber = "LK001214",
+                EmployeeId = "DRV014"
+            }
+        };
+
+        if (!context.Users.Any())
+        {
+            context.Users.AddRange(dispatcher, loader, driver, storeManager, drv014);
+            await context.SaveChangesAsync();
+        }
+        else if (!context.Users.Any(u => u.Email == "drv014@waypoint.lk"))
+        {
+            context.Users.Add(drv014);
+            await context.SaveChangesAsync();
+        }
     }
 }

@@ -229,12 +229,15 @@ func (w *OutboxWorker) processBatch(ctx context.Context, sess *amqpSession) erro
 
 	// eventRoutingKeys maps event_type → RabbitMQ routing key on waypoint.events.
 	eventRoutingKeys := map[string]string{
-		"FLAG_RAISED":          "flag.raised",
-		"LOADING_COMPLETED":    "loading.completed",
-		"ALLOCATION_COMPLETED": "allocation.completed",
-		"DELIVERY_COMPLETED":   "delivery.completed",
-		"ORDER_DEFERRED":       "order.deferred",
-		"ROUTE_RESEQUENCED":    "loading.resequenced",
+		"FLAG_RAISED":              "flag.raised",
+		"LOADING_COMPLETED":        "loading.completed",
+		"ALLOCATION_COMPLETED":     "allocation.completed",
+		"DELIVERY_COMPLETED":       "delivery.completed",
+		"TRIP_COMPLETED":           "trip.completed",
+		"DELIVERY_WINDOW_OPEN":     "delivery.window.open",
+		"DRIVER_NOTIFICATION_PUSH": "driver.notification",
+		"ORDER_DEFERRED":           "order.deferred",
+		"ROUTE_RESEQUENCED":        "loading.resequenced",
 	}
 
 	for _, ev := range events {

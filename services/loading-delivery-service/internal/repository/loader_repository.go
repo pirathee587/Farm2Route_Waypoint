@@ -684,12 +684,12 @@ func (r *LoaderRepository) GetStopsWithProgressByTripID(ctx context.Context, tri
 			COALESCE(s.status, 'PENDING') AS status,
 			s.change_flag,
 			(SELECT COUNT(*) FROM public.load_stops sub WHERE sub.trip_id = s.trip_id)::INT AS total_stops,
-			COALESCE(o.brand, '') AS outlet_brand,
+			COALESCE(o.brand::text, '') AS outlet_brand,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'chilled'=ANY(li.tags)) AS has_chilled,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'frozen'=ANY(li.tags)) AS has_frozen,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'fragile'=ANY(li.tags)) AS has_fragile,
 			EXISTS (SELECT 1 FROM public.load_items li WHERE li.stop_id=s.stop_id AND 'ambient'=ANY(li.tags)) AS has_ambient,
-			COALESCE(o.parking_constraint, '') AS parking_constraint
+			COALESCE(o.parking_constraint::text, '') AS parking_constraint
 		FROM public.v_load_stop_progress s
 		LEFT JOIN public.outlets o ON s.outlet_id = o.outlet_id
 		WHERE s.trip_id = $1

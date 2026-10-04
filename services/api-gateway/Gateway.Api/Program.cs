@@ -64,7 +64,11 @@ builder.Services
 
 builder.Services.AddAuthorization(options =>
 {
-    // Default policy — every proxied request must be authenticated
+    // Named "Authenticated" policy — all proxied authenticated routes use this
+    // NOTE: "Default" and "Anonymous" are reserved by YARP and cannot be used as policy names.
+    options.AddPolicy("Authenticated", policy => policy.RequireAuthenticatedUser());
+
+    // FallbackPolicy — fallback for any route without explicit policy
     options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build();
