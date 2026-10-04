@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
@@ -25,15 +26,15 @@ export const LoginPage: React.FC = () => {
       navigate('/store-manager');
       return;
     }
-    if (user?.role === 'DRIVER') {
+    if (sessionUser?.role === 'DRIVER') {
       window.location.assign('/driver');
       return;
     }
-    if (user?.role === 'LOADER') {
+    if (sessionUser?.role === 'LOADER') {
       window.location.assign('/loader');
       return;
     }
-    if (user?.role === 'DISPATCHER' || user?.role === 'ADMIN') {
+    if (sessionUser?.role === 'DISPATCHER' || sessionUser?.role === 'ADMIN') {
       window.location.assign('/dispatcher/dashboard');
       return;
     }
