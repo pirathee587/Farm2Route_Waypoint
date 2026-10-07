@@ -1,5 +1,5 @@
 import { LayoutDashboard, LogOut, Package, Truck, Warehouse } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { authSession } from '@/features/auth/authSession';
 import waypointLogoImg from '@/assets/waypoint-logo.png';
 import './StoreManagerLayout.css';
@@ -14,6 +14,20 @@ const navigation = [
 
 export function StoreManagerLayout() {
   const user = authSession.get()?.user;
+  const location = useLocation();
+
+  const isNavigationActive = (label: string, to: string) => {
+    const target = new URL(to, window.location.origin);
+    const pathMatches = label === 'Dashboard'
+      ? location.pathname === target.pathname
+      : location.pathname.startsWith(target.pathname);
+    if (!pathMatches) return false;
+
+    const currentStatus = new URLSearchParams(location.search).get('status');
+    if (label === 'Deliveries') return currentStatus === 'ALLOCATED';
+    if (label === 'Orders') return currentStatus !== 'ALLOCATED';
+    return true;
+  };
 
   const signOut = () => {
     authSession.clear();
@@ -31,8 +45,8 @@ export function StoreManagerLayout() {
         <nav className="store-nav" aria-label="Store Manager navigation">
           {navigation.map(({ label, to, icon: Icon, end }) => (
             <NavLink
-              className={({ isActive }: { isActive: boolean }) =>
-                `store-nav-link${isActive ? ' is-active' : ''}`}
+              className={() =>
+                `store-nav-link${isNavigationActive(label, to) ? ' is-active' : ''}`}
               end={end}
               key={label}
               to={to}

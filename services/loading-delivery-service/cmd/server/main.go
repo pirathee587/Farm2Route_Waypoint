@@ -241,6 +241,18 @@ func main() {
 	driverMux.HandleFunc("POST /api/delivery/driver/trips/{tripId}/complete", tripSummaryHandler.Complete)
 	mux.Handle("/api/delivery/driver/", middleware.GatewayAuthMiddleware(middleware.RequireDriver(driverMux)))
 
+	// Canonical delivery API. Legacy /driver routes remain for backwards compatibility.
+	deliveryMux := http.NewServeMux()
+	deliveryMux.HandleFunc("GET /api/delivery/runs/today", driverHandler.GetToday)
+	deliveryMux.HandleFunc("POST /api/delivery/trips/{tripId}/start", driverHandler.StartTrip)
+	deliveryMux.HandleFunc("POST /api/delivery/trips/{tripId}/stops/{stopId}/arrive", driverHandler.Arrive)
+	deliveryMux.HandleFunc("POST /api/delivery/trips/{tripId}/stops/{stopId}/complete", driverHandler.CompleteStop)
+	deliveryMux.HandleFunc("POST /api/delivery/trips/{tripId}/stops/{stopId}/issue", driverHandler.IssueStop)
+	deliveryMux.HandleFunc("POST /api/delivery/sync", syncHandler.Sync)
+	mux.Handle("/api/delivery/runs/", middleware.GatewayAuthMiddleware(middleware.RequireDeliveryAccess(deliveryMux)))
+	mux.Handle("/api/delivery/trips/", middleware.GatewayAuthMiddleware(middleware.RequireDeliveryAccess(deliveryMux)))
+	mux.Handle("/api/delivery/sync", middleware.GatewayAuthMiddleware(middleware.RequireDeliveryAccess(deliveryMux)))
+
 	// Wrap root with request logger
 	rootHandler := middleware.RequestLogger(logger)(mux)
 

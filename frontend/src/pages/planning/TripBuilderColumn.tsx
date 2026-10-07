@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import type { DraftTrip, VehicleCandidate } from '@/entities/planning/planningTypes';
+import React, { useState, useEffect } from 'react';
+import type { DraftTrip, VehicleCandidate, DriverInfo } from '@/entities/planning/planningTypes';
 import type { QueueOrder } from '@/entities/order/orderTypes';
-import { ChevronDown, Plus, Check, X } from 'lucide-react';
+import { ChevronDown, Plus, Check, X, Loader2, AlertCircle } from 'lucide-react';
+import { fetchDrivers } from '@/features/planning-allocation/routePlanningApi';
 
 const AVAILABLE_DEPOTS = [
   'Peliyagoda',
@@ -11,22 +12,13 @@ const AVAILABLE_DEPOTS = [
   'Galle Sub-Depot'
 ];
 
-const AVAILABLE_DRIVERS = [
-  'Dilan Fernando',
-  'Kamal Perera',
-  'Nuwan Silva',
-  'Pradeep Kumara',
-  'Sunil Shantha',
-  'Anura Bandara'
-];
-
 interface TripBuilderColumnProps {
   draft: DraftTrip | null;
   vehicles: VehicleCandidate[];
   unplannedOrders?: QueueOrder[];
   onChangeVehicle: (v: VehicleCandidate) => void;
   onChangeDepot?: (depot: string) => void;
-  onChangeDriver?: (driver: string) => void;
+  onChangeDriver?: (driver: DriverInfo) => void;
   onAddOrder?: (order: QueueOrder) => void;
   onRemoveStop: (stopId: string) => void;
   onReorderStop: (stopId: string, direction: 'up' | 'down') => void;
@@ -43,12 +35,43 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
   onAddOrder,
   onRemoveStop, 
   onReorderStop, 
-  onSaveDraft 
+  onSaveDraft,
 }) => {
   const [vehicleDropdownOpen, setVehicleDropdownOpen] = useState(false);
   const [depotDropdownOpen, setDepotDropdownOpen] = useState(false);
   const [driverDropdownOpen, setDriverDropdownOpen] = useState(false);
   const [showAddOrderPicker, setShowAddOrderPicker] = useState(false);
+
+  // Driver state — fetched from DB
+  const [drivers, setDrivers] = useState<DriverInfo[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [driversError, setDriversError] = useState<string | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<DriverInfo | null>(null);
+
+  const loadDrivers = () => {
+    if (driversLoading) return;
+    setDriversLoading(true);
+    setDriversError(null);
+    fetchDrivers()
+      .then(setDrivers)
+      .catch((err) => {
+        console.error('Failed to load drivers:', err);
+        setDriversError('Failed to load drivers');
+      })
+      .finally(() => setDriversLoading(false));
+  };
+
+  // Preload drivers on mount
+  useEffect(() => {
+    loadDrivers();
+  }, []);
+
+  // Also retry if opened and still empty
+  useEffect(() => {
+    if (driverDropdownOpen && drivers.length === 0 && !driversLoading) {
+      loadDrivers();
+    }
+  }, [driverDropdownOpen]);
 
   if (!draft) {
     return (
@@ -60,6 +83,7 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
 
   const handleSelectVehicle = (v: VehicleCandidate) => {
     onChangeVehicle(v);
+    setSelectedDriver(null);
     setVehicleDropdownOpen(false);
   };
 
@@ -68,10 +92,13 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
     setDepotDropdownOpen(false);
   };
 
-  const handleSelectDriver = (dr: string) => {
-    if (onChangeDriver) onChangeDriver(dr);
+  const handleSelectDriver = (driver: DriverInfo) => {
+    setSelectedDriver(driver);
+    if (onChangeDriver) onChangeDriver(driver);
     setDriverDropdownOpen(false);
   };
+
+  const displayDriverName = selectedDriver?.fullName || (draft.vehicle?.driverName && draft.vehicle.driverName !== 'Select driver' ? draft.vehicle.driverName : null);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
@@ -142,7 +169,7 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
             {vehicleDropdownOpen && (
               <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 30 }}>
                 <div style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Select Vehicle</div>
-                {vehicles.filter(v => v.status === 'Available' && v.tripsToday < 2 && v.fuelStatus === 'Within quota' && v.currentDepot === draft.depot).map(v => (
+                {vehicles.map(v => (
                   <div 
                     key={v.id} 
                     onClick={() => handleSelectVehicle(v)}
@@ -171,27 +198,78 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
               style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
             >
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{draft.vehicle ? draft.vehicle.driverName : '-'}</div>
-                <div style={{ fontSize: '11px', color: '#16A34A', marginTop: '2px', fontWeight: 500 }}>{draft.vehicle ? 'Available' : ''}</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: displayDriverName ? '#1e293b' : '#94a3b8' }}>
+                  {displayDriverName || '-'}
+                </div>
+                {displayDriverName && (
+                  <div style={{ fontSize: '11px', color: '#16A34A', marginTop: '2px', fontWeight: 500 }}>Available</div>
+                )}
               </div>
               <ChevronDown size={14} color="#94a3b8" />
             </div>
 
             {driverDropdownOpen && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 30 }}>
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 30, minWidth: '220px' }}>
                 <div style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Select Driver</div>
-                {AVAILABLE_DRIVERS.map(dr => (
+
+                {driversLoading && (
+                  <div style={{ padding: '16px 12px', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '13px' }}>
+                    <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                    Loading drivers…
+                  </div>
+                )}
+
+                {driversError && (
+                  <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px', color: '#DC2626', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertCircle size={14} />
+                      {driversError}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); loadDrivers(); }}
+                      style={{ alignSelf: 'flex-start', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: '#B91C1C', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {!driversLoading && !driversError && drivers.length === 0 && (
+                  <div style={{ padding: '12px', fontSize: '13px', color: '#94a3b8', textAlign: 'center' }}>
+                    No drivers found
+                  </div>
+                )}
+
+                {!driversLoading && drivers.map(driver => (
                   <div 
-                    key={dr}
-                    onClick={() => handleSelectDriver(dr)}
-                    style={{ padding: '8px 12px', borderTop: '1px solid #f1f5f9', cursor: 'pointer', fontSize: '13px', fontWeight: 500, color: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: draft.vehicle?.driverName === dr ? '#F8FAFC' : '#fff' }}
+                    key={driver.id}
+                    onClick={() => handleSelectDriver(driver)}
+                    style={{
+                      padding: '10px 12px',
+                      borderTop: '1px solid #f1f5f9',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: '#1e293b',
+                      backgroundColor: selectedDriver?.id === driver.id ? '#F0FDF4' : '#fff',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => { if (selectedDriver?.id !== driver.id) (e.currentTarget as HTMLDivElement).style.backgroundColor = '#f8fafc'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = selectedDriver?.id === driver.id ? '#F0FDF4' : '#fff'; }}
                   >
-                    <span>{dr}</span>
-                    {draft.vehicle?.driverName === dr && <Check size={14} color="#16A34A" />}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{driver.fullName}</div>
+                        {driver.depot && <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{driver.depot}</div>}
+                      </div>
+                      {selectedDriver?.id === driver.id && <Check size={14} color="#16A34A" />}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
+
           </div>
         </div>
 
@@ -206,7 +284,7 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
         {/* Trip Summary Band */}
         {draft.vehicle && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#FEF3C7', borderRadius: '8px', marginBottom: '24px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Trip {draft.vehicle.tripsToday + 1} of 2</span>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Trip {draft.vehicle.tripsToday + 1}</span>
             <span style={{ fontSize: '12px', color: '#64748b' }}>Home Depot: <span style={{ color: '#1e293b', fontWeight: 500 }}>{draft.vehicle.currentDepot}</span></span>
             <span style={{ fontSize: '12px', color: '#64748b' }}>Fuel: <span style={{ color: draft.vehicle.fuelStatus === 'Within quota' ? '#16A34A' : '#DC2626', fontWeight: 600 }}>{draft.vehicle.fuelStatus}</span></span>
           </div>
@@ -257,7 +335,7 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
             </div>
           ))}
 
-          {/* Screenshot-matched + Add Order to Trip with dashed borders */}
+          {/* Add Order to Trip */}
           <div style={{ borderTop: '1px dashed #cbd5e1', borderBottom: '1px dashed #cbd5e1', padding: '12px 0' }}>
             <button 
               onClick={() => setShowAddOrderPicker(!showAddOrderPicker)}
@@ -267,7 +345,6 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
             </button>
           </div>
 
-          {/* Inline Order Picker when Add Order to Trip is clicked */}
           {showAddOrderPicker && (
             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px', marginTop: '-8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -336,6 +413,8 @@ export const TripBuilderColumn: React.FC<TripBuilderColumnProps> = ({
         </div>
 
       </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };

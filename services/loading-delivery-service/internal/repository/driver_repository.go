@@ -24,9 +24,17 @@ func (r *DriverRepository) GetDriverVehicle(ctx context.Context, driverID uuid.U
 	err := r.pool.QueryRow(ctx, `
 		SELECT p.id::text, p.full_name, v.vehicle_id, v.type::text, v.depot
 		FROM public.user_profiles p
-		JOIN public.vehicles v ON v.driver_id=p.id AND v.is_active=TRUE
-		WHERE p.id=$1 AND p.role='DRIVER' AND p.is_active=TRUE
-		ORDER BY v.vehicle_id LIMIT 1`, driverID).Scan(&d.ID, &d.Name, &v.ID, &v.Type, &v.Depot)
+		JOIN LATERAL (
+			SELECT candidate.vehicle_id FROM (
+				SELECT t.vehicle_id, 0 AS priority, t.delivery_date
+				FROM public.trips t WHERE t.driver_id=p.id AND (t.delivery_date=CURRENT_DATE OR t.status::text NOT IN ('COMPLETED','CANCELLED'))
+				UNION ALL
+				SELECT owned.vehicle_id, 1 AS priority, CURRENT_DATE
+				FROM public.vehicles owned WHERE owned.driver_id=p.id AND owned.is_active=TRUE
+			) candidate ORDER BY candidate.priority, candidate.delivery_date DESC LIMIT 1
+		) assigned ON TRUE
+		JOIN public.vehicles v ON v.vehicle_id=assigned.vehicle_id AND v.is_active=TRUE
+		WHERE p.id=$1 AND p.role='DRIVER' AND p.is_active=TRUE`, driverID).Scan(&d.ID, &d.Name, &v.ID, &v.Type, &v.Depot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, v, model.ErrNotFound("No active vehicle assigned to driver")
 	}
@@ -37,8 +45,10 @@ func (r *DriverRepository) GetDriverVehicle(ctx context.Context, driverID uuid.U
 }
 
 func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, vehicleID string, date time.Time) ([]model.DriverTripRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT trip_id::text, trip_number, status::text FROM public.trips
-		WHERE driver_id=$1 AND vehicle_id=$2 AND delivery_date=$3::date ORDER BY trip_number`, driverID, vehicleID, date.Format("2006-01-02"))
+	rows, err := r.pool.Query(ctx, `SELECT trip_id::text, trip_number, status::text, ready_at FROM public.trips
+		WHERE driver_id=$1
+		  AND (delivery_date=$2::date OR (ready_at IS NOT NULL AND status::text NOT IN ('COMPLETED','CANCELLED')))
+		  AND trip_number IS NOT NULL ORDER BY delivery_date,trip_number`, driverID, date.Format("2006-01-02"))
 	if err != nil {
 		return nil, fmt.Errorf("get driver trips: %w", err)
 	}
@@ -46,7 +56,7 @@ func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, veh
 	result := []model.DriverTripRecord{}
 	for rows.Next() {
 		var x model.DriverTripRecord
-		if err := rows.Scan(&x.ID, &x.TripNumber, &x.Status); err != nil {
+		if err := rows.Scan(&x.ID, &x.TripNumber, &x.Status, &x.ReadyAt); err != nil {
 			return nil, err
 		}
 		result = append(result, x)
@@ -56,7 +66,7 @@ func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, veh
 
 func (r *DriverRepository) GetTrip(ctx context.Context, driverID, tripID uuid.UUID) (model.DriverTripRecord, error) {
 	var x model.DriverTripRecord
-	err := r.pool.QueryRow(ctx, `SELECT trip_id::text, trip_number, status::text FROM public.trips WHERE trip_id=$1 AND driver_id=$2`, tripID, driverID).Scan(&x.ID, &x.TripNumber, &x.Status)
+	err := r.pool.QueryRow(ctx, `SELECT trip_id::text, trip_number, status::text, ready_at FROM public.trips WHERE trip_id=$1 AND driver_id=$2`, tripID, driverID).Scan(&x.ID, &x.TripNumber, &x.Status, &x.ReadyAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool
 		if e := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.trips WHERE trip_id=$1)`, tripID).Scan(&exists); e != nil {
@@ -68,6 +78,19 @@ func (r *DriverRepository) GetTrip(ctx context.Context, driverID, tripID uuid.UU
 		return x, model.ErrNotFound("Trip not found")
 	}
 	return x, err
+}
+
+func (r *DriverRepository) StartTrip(ctx context.Context, driverID, tripID, operationID uuid.UUID, at time.Time) (model.TripStartResponse, error) {
+	var out model.TripStartResponse
+	err := r.pool.QueryRow(ctx, `UPDATE public.trips SET started_at=COALESCE(started_at,$3),departed_at=COALESCE(departed_at,$3),status='IN_PROGRESS',updated_at=$3 WHERE trip_id=$1 AND driver_id=$2 AND ready_at IS NOT NULL RETURNING trip_id::text,status::text,started_at`, tripID, driverID, at).Scan(&out.TripID,&out.Status,&out.StartedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var owner *uuid.UUID; var ready *time.Time
+		if e:=r.pool.QueryRow(ctx,`SELECT driver_id,ready_at FROM public.trips WHERE trip_id=$1`,tripID).Scan(&owner,&ready); errors.Is(e,pgx.ErrNoRows) { return out, model.ErrNotFound("Trip not found") } else if e!=nil{return out,e}
+		if owner==nil || *owner!=driverID{return out,ErrDriverTripForbidden}
+		return out, model.NewAppError(model.ErrCodeConflict,"Trip is not ready to start",409)
+	}
+	_ = operationID
+	return out, err
 }
 
 func (r *DriverRepository) GetStops(ctx context.Context, tripID uuid.UUID) ([]model.DriverStopRecord, error) {

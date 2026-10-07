@@ -1,0 +1,8 @@
+date,dow,dow_name,is_weekend,iso_year,iso_week,is_payday,festival,festival_ramp,is_holiday,monsoon,is_operating
+2026-10-05,1,Monday,false,2026,41,false,,false,false,true,true
+2026-10-06,2,Tuesday,false,2026,41,false,,false,false,true,true
+2026-10-07,3,Wednesday,false,2026,41,false,,false,false,true,true
+2026-10-08,4,Thursday,false,2026,41,false,,false,false,true,true
+2026-10-09,5,Friday,false,2026,41,false,,false,false,true,true
+2026-10-10,6,Saturday,true,2026,41,false,,false,false,true,true
+2026-10-11,0,Sunday,true,2026,41,false,,false,false,true,false

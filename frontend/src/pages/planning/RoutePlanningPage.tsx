@@ -7,17 +7,17 @@ import {
   fetchPlanningSummary, 
   fetchAvailableVehicles, 
   generateSuggestedPlan, 
-  validateTrip, 
   confirmTrip,
   savePlanningDraft,
   fetchPlanningOrders,
   addOrderToTrip,
   removeOrderFromTrip,
   assignTripVehicle,
+  assignTripDriver,
   updateTripDepot,
   updateTripStops,
 } from '@/features/planning-allocation/routePlanningApi';
-import type { PlanningSummary, VehicleCandidate, DraftTrip } from '@/entities/planning/planningTypes';
+import type { PlanningSummary, VehicleCandidate, DraftTrip, DriverInfo } from '@/entities/planning/planningTypes';
 import type { QueueOrder } from '@/entities/order/orderTypes';
 import { Check } from 'lucide-react';
 
@@ -27,6 +27,7 @@ interface RoutePlanningPageProps {
 }
 
 export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigateGlobal, selectedOrders }) => {
+  const [planningDate, setPlanningDate] = useState(() => { const date = new Date(); date.setDate(date.getDate() + 1); return date.toISOString().slice(0, 10); });
   const [summary, setSummary] = useState<PlanningSummary | null>(null);
   const [vehicles, setVehicles] = useState<VehicleCandidate[]>([]);
   const [unplannedOrders, setUnplannedOrders] = useState<QueueOrder[]>([]);
@@ -39,6 +40,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
   // Loading states
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
 
@@ -48,9 +50,9 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
       setLoading(true);
       try {
       const [sum, vehs, orders] = await Promise.all([
-        fetchPlanningSummary(),
+        fetchPlanningSummary(planningDate),
         fetchAvailableVehicles(),
-        fetchPlanningOrders(),
+        fetchPlanningOrders(planningDate),
       ]);
       if (!mounted) return;
       setSummary(sum);
@@ -62,7 +64,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
       
       if (selectedOrders && selectedOrders.length > 0) {
         setGenerating(true);
-        const plan = await generateSuggestedPlan(selectedOrders);
+        const plan = await generateSuggestedPlan(selectedOrders, planningDate);
         if (mounted) {
           setDraft(plan);
           setUnplannedOrders(prev => prev.filter(o => !selectedOrders.find(so => so.id === o.id)));
@@ -74,7 +76,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     };
     loadData();
     return () => { mounted = false; };
-  }, [selectedOrders]);
+  }, [selectedOrders, planningDate]);
 
   const handleGeneratePlan = async () => {
     if (unplannedOrders.length === 0) {
@@ -85,12 +87,12 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     setActionError(null);
     // Suggest a plan for the top 3 orders
     const toPlan = unplannedOrders.slice(0, 3);
-    try { const plan = await generateSuggestedPlan(toPlan); setDraft(plan); setUnplannedOrders(prev => prev.filter(o => !toPlan.find(to => to.id === o.id))); }
+    try { const plan = await generateSuggestedPlan(toPlan, planningDate); setDraft(plan); setUnplannedOrders(prev => prev.filter(o => !toPlan.find(to => to.id === o.id))); }
     catch(error){setActionError(error instanceof Error?error.message:'Unable to generate plan.');} finally { setGenerating(false); }
   };
 
   const handleAddOrder = async (order: QueueOrder) => {
-    try { const next = draft ? await addOrderToTrip(draft,order) : await generateSuggestedPlan([order]); setDraft(next); setUnplannedOrders(prev=>prev.filter(o=>o.id!==order.id)); }
+    try { const next = draft ? await addOrderToTrip(draft,order) : await generateSuggestedPlan([order], planningDate); setDraft(next); setUnplannedOrders(prev=>prev.filter(o=>o.id!==order.id)); }
     catch(error){setActionError(error instanceof Error?error.message:'Unable to add order.');}
   };
 
@@ -128,32 +130,27 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
     try { setDraft(await updateTripDepot(draft,depot)); } catch(error){setActionError(error instanceof Error?error.message:'Unable to change depot.');}
   };
 
-  const handleChangeDriver = (driverName: string) => {
+  const handleChangeDriver = async (driver: DriverInfo) => {
     if (!draft || !draft.vehicle) return;
-    setDraft({
-      ...draft,
-      vehicle: {
-        ...draft.vehicle,
-        driverName
-      }
-    });
+    try { setDraft(await assignTripDriver(draft, driver)); }
+    catch(error){setActionError(error instanceof Error?error.message:'Unable to assign driver.');}
   };
 
   const handleConfirmPlan = async () => {
-    if (!draft || !draft.validation?.feasible) return;
+    if (confirming) return;
+    if (!draft || !draft.vehicle || draft.stops.length === 0) { setActionError('Assign a vehicle and add at least one order before confirming.'); return; }
+    setConfirming(true);
     setActionError(null);
     try {
-      const validated = await validateTrip(draft);
-      setDraft(validated);
-      const res = await confirmTrip(validated);
+      const res = await confirmTrip(draft);
       if (res.success) {
         setDraft(res.trip);
         setShowConfirmModal(false);
         setShowSuccessModal(true);
       } else setActionError('The plan is no longer feasible. Review its constraints.');
-    } catch {
-      setActionError('Unable to confirm the plan. Please try again.');
-    }
+    } catch(error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to confirm the plan. Please try again.');
+    } finally { setConfirming(false); }
   };
 
   const handleSaveDraft = async () => {
@@ -178,6 +175,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
             <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Build feasible trips, allocate orders and validate fleet constraints.</p>
           </div>
           <div style={{ display: 'flex', gap: '16px' }}>
+            <input type="date" value={planningDate} min={new Date().toISOString().slice(0,10)} onChange={event=>{setDraft(null);setActionError(null);setPlanningDate(event.target.value);}} aria-label="Planning date" style={{ padding:'9px 12px',borderRadius:'8px',border:'1px solid #e2e8f0',background:'#fff',color:'#334155',fontSize:'13px',fontWeight:600 }} />
             <button onClick={handleSaveDraft} disabled={!draft} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', fontSize: '13px', fontWeight: 600, color: '#475569', cursor: draft ? 'pointer' : 'not-allowed', opacity: draft ? 1 : 0.55 }}>
               {draftSaved ? 'Draft Saved' : 'Save Draft'}
             </button>
@@ -283,8 +281,8 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
             </div>
 
             <div style={{ padding: '24px 32px', backgroundColor: '#f8fafc', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
-              <button onClick={() => setShowConfirmModal(false)} style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '13px', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleConfirmPlan} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', backgroundColor: '#F59E0B', fontSize: '13px', fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}>Confirm Plan</button>
+              <button onClick={() => setShowConfirmModal(false)} disabled={confirming} style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '13px', fontWeight: 600, color: '#475569', cursor: confirming ? 'not-allowed' : 'pointer', opacity: confirming ? 0.6 : 1 }}>Cancel</button>
+              <button onClick={handleConfirmPlan} disabled={confirming} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', backgroundColor: '#F59E0B', fontSize: '13px', fontWeight: 700, color: '#0f172a', cursor: confirming ? 'wait' : 'pointer', opacity: confirming ? 0.7 : 1 }}>{confirming ? 'Confirming...' : 'Confirm Plan'}</button>
             </div>
           </div>
         </div>

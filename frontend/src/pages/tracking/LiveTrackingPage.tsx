@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { DispatcherSidebar, type DispatcherPage } from '@/shared/layouts/DispatcherSidebar';
 import { RefreshCw, Search } from 'lucide-react';
-import { fetchLiveTrackingData, mockActiveTrips, mockTrackingSummary } from '@/features/delivery-tracking/liveTrackingApi';
+import { fetchLiveTrackingData } from '@/features/delivery-tracking/liveTrackingApi';
 import type { ActiveTrip, LiveTrackingSummary } from '@/entities/tracking/trackingTypes';
 import { ActiveTripCard } from './components/ActiveTripCard';
 import { LiveOperationsMapCanvas } from './components/LiveOperationsMapCanvas';
@@ -23,8 +23,8 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
   selectedTripId: initialTripId,
   onSelectTrip,
 }) => {
-  const [trips, setTrips] = useState<ActiveTrip[]>(mockActiveTrips);
-  const [summary, setSummary] = useState<LiveTrackingSummary>(mockTrackingSummary);
+  const [trips, setTrips] = useState<ActiveTrip[]>([]);
+  const [summary, setSummary] = useState<LiveTrackingSummary>({activeTripsCount:0,onTimeCount:0,atRiskCount:0,issuesCount:0,lastUpdated:''});
   const [selectedTripId, setSelectedTripId] = useState<string>(initialTripId || 'TRIP-0925-014');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ON_TIME' | 'AT_RISK' | 'ISSUE'>('ALL');

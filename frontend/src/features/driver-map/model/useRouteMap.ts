@@ -85,7 +85,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
     let isMounted = true;
     async function fetchTodayTrip() {
       try {
-        const res = await fetch('/api/delivery/driver/today', {
+        const res = await fetch('/api/delivery/runs/today', {
           headers: getAuthHeaders(),
         });
         if (res.ok) {

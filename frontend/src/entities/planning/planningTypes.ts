@@ -24,6 +24,16 @@ export interface VehicleCandidate {
   fuelStatus: 'Within quota' | 'Exceeded';
 }
 
+
+export interface DriverInfo {
+  id: string;
+  fullName: string;
+  email: string;
+  depot?: string;
+  vehicleId?: string;
+  licenseNumber?: string;
+  employeeId?: string;
+}
 export interface TripStop {
   id: string;
   sequence: number;
@@ -52,7 +62,8 @@ export interface TripValidationResult {
 
 export interface DraftTrip {
   id: string;
-  status: 'DRAFT' | 'PLANNED';
+  planningDate: string;
+  status: 'DRAFT' | 'PLANNED' | 'CONFIRMED';
   depot: string;
   vehicle: VehicleCandidate | null;
   stops: TripStop[];

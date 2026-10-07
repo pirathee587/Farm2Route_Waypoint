@@ -13,6 +13,7 @@ public record OrderSummaryResponse(
     String status,
     int item_count,
     String summary,
+    String created_by_user_id,
     Instant created_at
 ) {
     public static OrderSummaryResponse from(OrderEntity order) {
@@ -31,6 +32,7 @@ public record OrderSummaryResponse(
             order.getStatus().name(),
             order.getItems().size(),
             summary,
+            order.getCreatedByUserId(),
             order.getCreatedAt());
     }
 }

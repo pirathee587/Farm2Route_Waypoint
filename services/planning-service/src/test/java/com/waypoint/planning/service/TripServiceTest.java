@@ -31,9 +31,9 @@ class TripServiceTest {
         var o=order(820,7.8,"CHILLED");var v=vehicle("AMBIENT");var req=new TripDraftRequest(date,List.of(o.orderId()),v.vehicleId(),List.of());when(refs.getOrders(req.orderIds())).thenReturn(List.of(o));when(refs.getVehicle(v.vehicleId())).thenReturn(v);
         assertThat(service.validate(req).checks()).anyMatch(c->c.code().equals("TEMPERATURE")&&c.status().equals("FAILED"));
     }
-    @Test void vehicleAtTripLimitIsRejected(){
+    @Test void vehicleWithTwoExistingTripsIsRejected(){
         var o=order(10,1,"AMBIENT");var v=vehicle("AMBIENT");var req=new TripDraftRequest(date,List.of(o.orderId()),v.vehicleId(),List.of());when(refs.getOrders(req.orderIds())).thenReturn(List.of(o));when(refs.getVehicle(v.vehicleId())).thenReturn(v);when(repo.tripCount(v.vehicleId(),date)).thenReturn(2);
-        assertThat(service.validate(req).checks()).anyMatch(c->c.code().equals("TRIPS_PER_DAY")&&c.status().equals("FAILED"));
+        assertThat(service.validate(req).checks()).anyMatch(c->c.code().equals("TRIP_LIMIT_REACHED")&&c.status().equals("FAILED"));
     }
     @Test void duplicateOrdersAreRejected(){var id=UUID.randomUUID();var req=new TripDraftRequest(date,List.of(id,id),"VEH-1",List.of());assertThatThrownBy(()->service.validate(req)).isInstanceOf(PlanningException.class).hasMessageContaining("Duplicate");}
 }

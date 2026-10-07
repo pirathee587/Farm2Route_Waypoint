@@ -81,7 +81,7 @@ export const PlannedTripDetailPage: React.FC<PlannedTripDetailPageProps> = ({ tr
             <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
               {trip.depot} <span style={{ color: '#F59E0B', margin: '0 4px' }}>→</span> Colombo <span style={{ color: '#F59E0B', margin: '0 4px' }}>→</span> Nugegoda
             </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>25 Sep 2026</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(`${trip.planningDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
           </div>
           
           <div style={{ display: 'flex', gap: '64px' }}>

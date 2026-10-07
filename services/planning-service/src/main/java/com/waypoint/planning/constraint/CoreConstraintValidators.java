@@ -42,12 +42,23 @@ final class Checks {
     public ConstraintCheck validate(PlanningContext c){StopPlan bad=c.stops().stream().filter(s->{LocalTime a=s.plannedArrival();return a==null||(s.windowOpen()!=null&&a.isBefore(s.windowOpen()))||(s.windowClose()!=null&&a.isAfter(s.windowClose()));}).findFirst().orElse(null);return Checks.result(code(),bad==null,"Deterministic planned arrival must be within each delivery window",bad==null?"all within window":String.valueOf(bad.plannedArrival()),bad==null?"delivery windows":bad.windowOpen()+"-"+bad.windowClose(),bad==null?null:bad.orderId());}
 }
 @Component @Order(70) class FuelQuotaConstraintValidator implements ConstraintValidator {
-    public String code(){return "FUEL_QUOTA";}
-    public ConstraintCheck validate(PlanningContext c){double q=c.vehicle().weeklyFuelQuotaL();if(q<=0)return ConstraintCheck.notEvaluated(code(),"Authoritative weekly fuel quota is not configured");double used=c.vehicle().weeklyFuelUsedL();return Checks.result(code(),used<q,"Weekly fuel quota must not be exceeded",String.valueOf(used),String.valueOf(q),null);}
+    public String code(){return "FUEL_QUOTA_EXCEEDED";}
+    public ConstraintCheck validate(PlanningContext c){
+        double quota=c.vehicle().weeklyFuelQuotaL();
+        if(quota<=0)return ConstraintCheck.notEvaluated(code(),"Authoritative weekly fuel quota is not configured");
+        if(!c.fuelProjectionAvailable())return ConstraintCheck.notEvaluated(code(),"Fuel efficiency or district travel data is not configured");
+        double used=c.currentWeekFuelL(),planned=c.plannedFuelL();
+        String reason=String.format(java.util.Locale.ROOT,"Vehicle %s would exceed weekly fuel quota. Used: %.2fL, Planned: %.2fL, Quota: %.2fL",c.vehicle().vehicleId(),used,planned,quota);
+        return Checks.result(code(),used+planned<=quota,reason,String.format(java.util.Locale.ROOT,"%.2f",used+planned),String.format(java.util.Locale.ROOT,"%.2f",quota),null);
+    }
 }
 @Component @Order(80) class TripsPerDayConstraintValidator implements ConstraintValidator {
-    public String code(){return "TRIPS_PER_DAY";}
-    public ConstraintCheck validate(PlanningContext c){return Checks.result(code(),c.existingTrips()<2,"Maximum two trips per vehicle per day",String.valueOf(c.existingTrips()),"2",null);}
+    public String code(){return "TRIP_LIMIT_REACHED";}
+    public ConstraintCheck validate(PlanningContext c){
+        int assignedTrips=c.existingTrips();
+        String reason="Vehicle "+c.vehicle().vehicleId()+" already has 2 trips assigned for "+c.planningDate()+". Maximum 2 trips per vehicle per day.";
+        return Checks.result(code(),assignedTrips<2,reason,String.valueOf(assignedTrips),"2",null);
+    }
 }
 @Component @Order(90) class VehicleAvailabilityConstraintValidator implements ConstraintValidator {
     public String code(){return "VEHICLE_AVAILABILITY";}

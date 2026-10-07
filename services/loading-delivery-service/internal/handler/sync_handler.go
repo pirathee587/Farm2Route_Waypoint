@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/waypoint/loading-delivery-service/internal/middleware"
@@ -35,9 +36,12 @@ func decodeSyncJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 func (h *SyncHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	var req model.SyncRequest
-	if !decodeSyncJSON(w, r, &req) {
-		return
-	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w,r.Body,2*1024*1024)); if err!=nil { model.ErrBadRequest("invalid request body").WriteJSON(w); return }
+	if len(raw)>0 && raw[0]=='[' {
+		var batch []struct { OperationID string `json:"operation_id"`; Type string `json:"type"`; StopID string `json:"stop_id"`; Payload json.RawMessage `json:"payload"`; CapturedAt time.Time `json:"captured_at"` }
+		if err=json.Unmarshal(raw,&batch); err!=nil { model.ErrBadRequest("invalid request body").WriteJSON(w); return }
+		for _,x:=range batch { req.Actions=append(req.Actions,model.SyncAction{ClientActionID:x.OperationID,Type:x.Type,StopID:x.StopID,Payload:x.Payload,ClientTimestamp:x.CapturedAt}) }
+	} else if err=json.Unmarshal(raw,&req); err!=nil { model.ErrBadRequest("invalid request body").WriteJSON(w); return }
 	u, _ := middleware.GetUserFromContext(r.Context())
 	out, err := h.service.Sync(r.Context(), u.UserID, req)
 	writeDriverResponse(w, out, err)

@@ -8,7 +8,7 @@ export async function fetchCurrentReportData(): Promise<ReportData> {
   const totalOrders = deferred.length;
   const deferredOrders = deferred.length;
   const plannedOrders = totalOrders - deferredOrders;
-  const plannedPercent = Math.round((plannedOrders / totalOrders) * 1000) / 10;
+  const plannedPercent = totalOrders > 0 ? Math.round((plannedOrders / totalOrders) * 1000) / 10 : 0;
   const categories = ['Capacity', 'Window', 'Vehicle', 'Other'] as const;
   const colors = ['#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
   const deferralBreakdown: DeferralBreakdownItem[] = categories.map((category, index) => ({
@@ -25,7 +25,7 @@ export async function fetchCurrentReportData(): Promise<ReportData> {
   return {
     reportDate: 'Current operational state', totalOrders, plannedOrders, deferredOrders,
     activeTrips: tracking.summary.activeTripsCount, issues,
-    deliveryPerformance: { plannedOrders, deferredOrders, issues, totalOrders, plannedPercent, deferredPercent: Math.round((deferredOrders / totalOrders) * 1000) / 10 },
+    deliveryPerformance: { plannedOrders, deferredOrders, issues, totalOrders, plannedPercent, deferredPercent: totalOrders > 0 ? Math.round((deferredOrders / totalOrders) * 1000) / 10 : 0 },
     deferralBreakdown,
     fleetUtilisation: { available: fleet.summary.available, inUse: fleet.summary.inUse, unavailable: fleet.summary.unavailable, total: fleet.summary.totalFleet },
     chilledCapacity: { chilledAvailable: fleet.summary.chilledAvailable, chilledTotal: fleet.summary.chilledCapable, reeferTrucksTotal: 12, reeferVansTotal: 4, attentionRequired: fleet.reeferAttentionRequired },

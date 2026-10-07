@@ -21,6 +21,8 @@ export interface QueueOrder {
   volumeM3: number;
   status: PlanningStatus;
   constraint: SpecialConstraint;
+  productSummary?: string;
+  quantity?: number;
 }
 
 export interface OrderItem {

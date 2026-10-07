@@ -9,6 +9,7 @@ interface ApiOrderSummary {
   status: string;
   item_count: number;
   summary: string;
+  created_by_user_id?: string | null;
   created_at: string;
 }
 
@@ -16,6 +17,7 @@ interface ApiPagedOrders {
   items: ApiOrderSummary[];
   total_elements: number;
 }
+interface ApiPlanningOrder { orderId:string; outletName:string; district?:string; depot?:string; parkingType?:string; productCode?:string; quantity?:number; weightKg?:number; volumeM3?:number; tempRequirement?:string; windowOpen?:string; windowClose?:string; }
 
 const toQueueOrder = (order: ApiOrderSummary): QueueOrder => ({
   id: order.id,
@@ -31,15 +33,31 @@ const toQueueOrder = (order: ApiOrderSummary): QueueOrder => ({
   volumeM3: 0,
   status: /defer/i.test(order.status) ? 'Deferred' : /alloc|plan/i.test(order.status) ? 'Planned' : 'Unplanned',
   constraint: 'Valid',
+  productSummary: order.summary || undefined,
+  quantity: order.item_count,
 });
 
 export async function fetchOrdersQueueData(): Promise<OrdersQueueData> {
-  const page = await apiRequest<ApiPagedOrders>('/orders?page=0&size=100');
-  const orders = page.items.map(toQueueOrder);
+  const page = await apiRequest<ApiPagedOrders>('/orders?status=CONFIRMED&page=0&size=100');
+  // Legacy planning/demo rows have no Store Manager creator. Keep the dispatcher
+  // queue sourced exclusively from orders submitted through the Store Manager portal.
+  const syntheticOrder = /\b(mock|demo|test|qa|e2e|spoof|verification)\b|^f{5,}/i;
+  const storeManagerOrders = page.items.filter(order =>
+    Boolean(order.created_by_user_id) &&
+    !syntheticOrder.test(order.summary || '')
+  );
+  const baseOrders = storeManagerOrders.map(toQueueOrder);
+  const details = await Promise.allSettled(storeManagerOrders.map(order => apiRequest<ApiPlanningOrder>(`/planning/orders/${encodeURIComponent(order.id)}`)));
+  const orders = baseOrders.map((order,index) => {
+    const result=details[index]; if(result.status!=='fulfilled')return order; const detail=result.value;
+    const temperature:QueueOrder['temperature']=/frozen/i.test(detail.tempRequirement||'')?'Frozen':/chill/i.test(detail.tempRequirement||'')?'Chilled':'Ambient';
+    const constraint:QueueOrder['constraint']=/van/i.test(detail.parkingType||'')?'Van Only':temperature==='Ambient'?'Valid':'Reefer Required';
+    return {...order,outletName:detail.outletName||order.outletName,routeArea:[detail.depot,detail.district].filter(Boolean).join(' - ')||order.routeArea,deliveryWindow:detail.windowOpen&&detail.windowClose?`${detail.windowOpen} - ${detail.windowClose}`:'Not specified',temperature,weightKg:detail.weightKg||0,volumeM3:detail.volumeM3||0,constraint,productSummary:detail.productCode||order.productSummary,quantity:detail.quantity||0};
+  });
   return {
     orders,
     summary: {
-      totalOrders: page.total_elements,
+      totalOrders: orders.length,
       fresh: orders.filter(order => order.brand === 'Fresh').length,
       style: orders.filter(order => order.brand === 'Style').length,
       tech: orders.filter(order => order.brand === 'Tech').length,

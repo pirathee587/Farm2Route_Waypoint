@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DispatcherSidebar, type DispatcherPage } from '@/shared/layouts/DispatcherSidebar';
 import { Search, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchFleetData } from '@/features/fleet/fleetApi';
+import { fetchFleetData, fetchCapacityForecast, type CapacityForecastRow } from '@/features/fleet/fleetApi';
 import type { FleetVehicle, FleetSummary, VehicleType, VehicleStatus } from '@/entities/fleet/fleetTypes';
 
 interface FleetCapacityPageProps {
@@ -92,6 +92,7 @@ export const FleetCapacityPage: React.FC<FleetCapacityPageProps> = ({ onNavigate
   const [error, setError] = useState(false);
   const [summary, setSummary] = useState<FleetSummary | null>(null);
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [forecast, setForecast] = useState<CapacityForecastRow[]>([]);
   const [reeferWarning, setReeferWarning] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<FleetVehicle | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,10 +104,11 @@ export const FleetCapacityPage: React.FC<FleetCapacityPageProps> = ({ onNavigate
   const loadFleet = () => {
     setLoading(true);
     setError(false);
-    fetchFleetData().then((data) => {
+    Promise.all([fetchFleetData(),fetchCapacityForecast()]).then(([data,forecastRows]) => {
       setSummary(data.summary);
       setVehicles(data.vehicles);
       setReeferWarning(data.reeferAttentionRequired);
+      setForecast(forecastRows);
       setSelectedVehicle(data.vehicles[0] ?? null);
       setLoading(false);
     }).catch(() => {
@@ -475,6 +477,12 @@ export const FleetCapacityPage: React.FC<FleetCapacityPageProps> = ({ onNavigate
             )}
           </div>
         </div>
+        <section style={{marginTop:'20px',background:'#fff',border:'1px solid #e2e8f0',borderRadius:'16px',padding:'20px'}}>
+          <h2 style={{fontSize:'16px',margin:'0 0 4px',color:'#0f172a'}}>8-week demand forecast</h2>
+          <p style={{fontSize:'12px',color:'#64748b',margin:'0 0 14px'}}>Order volume and chilled volume by depot, brand and ISO week.</p>
+          {forecast.length===0?<div style={{fontSize:'13px',color:'#64748b'}}>No future confirmed or pending demand is recorded.</div>:
+          <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:'12px'}}><thead><tr>{['Week','Depot','Brand','Orders','Volume m³','Chilled m³'].map(h=><th key={h} style={{textAlign:'left',padding:'8px',borderBottom:'1px solid #e2e8f0',color:'#64748b'}}>{h}</th>)}</tr></thead><tbody>{forecast.map((row,index)=><tr key={`${row.weekStart}-${row.depot}-${row.brand}-${index}`}><td style={{padding:'8px'}}>{row.weekStart}</td><td style={{padding:'8px'}}>{row.depot}</td><td style={{padding:'8px'}}>{row.brand}</td><td style={{padding:'8px'}}>{row.orderCount}</td><td style={{padding:'8px'}}>{row.totalVolumeM3.toFixed(2)}</td><td style={{padding:'8px'}}>{row.chilledVolumeM3.toFixed(2)}</td></tr>)}</tbody></table></div>}
+        </section>
       </main>
     </div>
   );

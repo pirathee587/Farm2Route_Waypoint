@@ -13,11 +13,11 @@ public class SuggestionService {
     public SuggestionService(PlanningMasterDataPort refs,PlanningRepository repo,ConstraintEngine engine){this.refs=refs;this.repo=repo;this.engine=engine;}
     public SuggestionResponse suggest(LocalDate date){
         Set<UUID> allocated=new HashSet<>(repo.allocatedOrderIds(date));Set<UUID> deferred=new HashSet<>(repo.deferredOrderIds(date));
-        List<OrderRef> remaining=new ArrayList<>(refs.listPlanningOrders(date).stream().filter(o->!allocated.contains(o.orderId())&&!deferred.contains(o.orderId())).toList());
+        List<OrderRef> remaining=new ArrayList<>(refs.listPlanningOrders(date).stream().filter(o->"CONFIRMED".equalsIgnoreCase(o.orderStatus())&&!allocated.contains(o.orderId())&&!deferred.contains(o.orderId())).toList());
         List<SuggestedTrip> trips=new ArrayList<>();
         for(VehicleRef v:refs.listVehicles()){
-            if(!v.available()||repo.tripCount(v.vehicleId(),date)>=2)continue;
-            for(int route=repo.tripCount(v.vehicleId(),date);route<2 && !remaining.isEmpty();route++){
+            if(!v.available())continue;
+            while(!remaining.isEmpty()){
                 List<OrderRef> candidates=remaining.stream().filter(o->compatibleBase(o,v))
                         .sorted(Comparator.comparing(OrderRef::windowClose, Comparator.nullsLast(Comparator.naturalOrder()))).toList();
                 if(candidates.isEmpty())break; List<OrderRef> chosen=new ArrayList<>(); ValidationResult last=null;

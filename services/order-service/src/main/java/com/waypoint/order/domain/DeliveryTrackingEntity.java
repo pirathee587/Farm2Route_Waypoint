@@ -56,6 +56,7 @@ public class DeliveryTrackingEntity {
     public String getSourceNote() { return sourceNote; }
     public void setSourceNote(String sourceNote) { this.sourceNote = sourceNote; }
     public OffsetDateTime getEta() { return eta; }
+    public void setEta(OffsetDateTime eta) { this.eta = eta; }
     public boolean isDelayed() { return delayed; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }

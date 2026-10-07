@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { ActiveTrip, LiveTrackingSummary } from '@/entities/tracking/trackingTypes';
+import { apiRequest } from '@/shared/api/apiClient';
 
 export const mockTrackingSummary: LiveTrackingSummary = {
   activeTripsCount: 8,
@@ -429,21 +430,22 @@ export const mockActiveTrips: ActiveTrip[] = [
 ];
 
 export async function fetchLiveTrackingData(): Promise<{ trips: ActiveTrip[]; summary: LiveTrackingSummary }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        trips: [...mockActiveTrips],
-        summary: { ...mockTrackingSummary },
-      });
-    }, 150);
+  interface ApiStop { id:string;sequence:number;orderId:string;name:string;district:string;plannedArrival?:string;windowOpen?:string;windowClose?:string;status:string;temperature?:string; }
+  interface ApiTrip { tripId:string;tripCode:string;status:string;vehicleId:string;tripNumber:number;homeDepot:string;destination:string;weightKg:number;volumeM3:number;departedAt?:string;completedAt?:string;registration:string;vehicleType:string;tempCapability:string;maxWeightKg:number;maxVolumeM3:number;driverId?:string;stops:ApiStop[]; }
+  const date=new Date().toISOString().slice(0,10);
+  const rows=await apiRequest<ApiTrip[]>(`/planning/tracking?date=${date}`);
+  const trips:ActiveTrip[]=rows.map(row=>{
+    const completed=row.stops.filter(s=>/delivered|success/i.test(s.status)).length;
+    const next=row.stops.find(s=>!/delivered|success/i.test(s.status))||row.stops[row.stops.length-1];
+    const state:ActiveTrip['state']=row.status==='COMPLETED'?'COMPLETED':/IN_PROGRESS|LOADING/.test(row.status)?'IN_TRANSIT':'PLANNED';
+    const type=/van/i.test(row.vehicleType)?'Van':/ambient/i.test(row.tempCapability)?'Dry Box':'Reefer';
+    const stops=row.stops.map((s,i)=>({id:s.id,stopNumber:s.sequence,name:s.name,orderId:s.orderId,status:(/delivered|success/i.test(s.status)?'DELIVERED':i===completed?'NEXT':'UPCOMING') as import('@/entities/tracking/trackingTypes').StopStatus,timeText:s.plannedArrival||'Pending',deliveryWindow:s.windowOpen&&s.windowClose?`${s.windowOpen} - ${s.windowClose}`:'Not specified',locationArea:s.district}));
+    return {id:row.tripId,tripCode:row.tripCode,state,monitoringStatus:'ON_TIME',vehicleId:row.vehicleId,vehicleType:type,vehicleFullName:type==='Reefer'?'Refrigerated Truck':type==='Van'?'Cargo Van':'Standard Delivery Truck',vehiclePlate:row.registration||'',driverName:row.driverId||'Assigned driver',driverInitials:'DR',driverStatus:state==='IN_TRANSIT'?'Active · On route':'Assigned',origin:row.homeDepot||'',destination:row.destination||next?.district||'',fullRouteText:`${row.homeDepot||'Depot'} → ${row.destination||next?.district||'Route'}`,completedStops:completed,totalStops:row.stops.length,eta:next?.plannedArrival||'—',nextStopName:next?.name||'Completed',nextStopFullName:next?.name||'Completed',nextStopEta:next?.plannedArrival||'—',nextStopWindow:next?.windowOpen&&next?.windowClose?`${next.windowOpen} - ${next.windowClose}`:'Not specified',nextStopOrder:next?.orderId||'',nextStopTemperature:next?.temperature,nextStopItemsText:'Order details',weightKg:row.weightKg,maxWeightKg:row.maxWeightKg,volumeM3:row.volumeM3,maxVolumeM3:row.maxVolumeM3,chilledItemsCount:row.stops.filter(s=>/chill/i.test(s.temperature||'')).length,totalOrdersCount:row.stops.length,temperatureStatus:'Within range',homeDepot:row.homeDepot||'',tripUsage:`Trip ${row.tripNumber||1} of 2`,todayTrips:`${row.tripNumber||1}/2`,tripDepartedTime:row.departedAt?new Date(row.departedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):undefined,stops,constraints:[],activities:[]};
   });
+  return {trips,summary:{activeTripsCount:trips.filter(t=>t.state==='IN_TRANSIT').length,onTimeCount:trips.filter(t=>t.monitoringStatus==='ON_TIME').length,atRiskCount:trips.filter(t=>t.monitoringStatus==='AT_RISK').length,issuesCount:trips.filter(t=>t.monitoringStatus==='ISSUE').length,lastUpdated:new Date().toLocaleTimeString()}};
 }
 
 export async function fetchTripDetail(tripId: string): Promise<ActiveTrip | null> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const trip = mockActiveTrips.find((t) => t.id === tripId || t.tripCode === tripId);
-      resolve(trip ? { ...trip } : null);
-    }, 150);
-  });
+  const data=await fetchLiveTrackingData();
+  return data.trips.find(t=>t.id===tripId||t.tripCode===tripId)||null;
 }

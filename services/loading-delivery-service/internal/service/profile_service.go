@@ -48,19 +48,6 @@ func (s *ProfileService) Heartbeat(ctx context.Context, id uuid.UUID, request mo
 		return nil, model.ErrBadRequest("client_time is required")
 	}
 
-	func (s *ProfileService) Location(ctx context.Context, id uuid.UUID, request model.LocationUpdateRequest) (*model.LocationUpdateResponse, error) {
-		if request.Latitude < -90 || request.Latitude > 90 || request.Longitude < -180 || request.Longitude > 180 {
-			return nil, model.ErrBadRequest("latitude or longitude is out of range")
-		}
-		if request.AccuracyMeters < 0 || request.AccuracyMeters > 10000 {
-			return nil, model.ErrBadRequest("accuracy_meters must be between 0 and 10000")
-		}
-		recordedAt := s.now()
-		if err := s.repo.Location(ctx, id, request, recordedAt); err != nil {
-			return nil, err
-		}
-		return &model.LocationUpdateResponse{RecordedAt: recordedAt.In(s.location)}, nil
-	}
 	if request.PendingActionsCount < 0 {
 		return nil, model.ErrBadRequest("pending_actions_count must not be negative")
 	}
@@ -70,6 +57,21 @@ func (s *ProfileService) Heartbeat(ctx context.Context, id uuid.UUID, request mo
 	}
 	return &model.HeartbeatResponse{ServerTime: server.In(s.location), ClockSkewSeconds: int64(math.Round(server.Sub(request.ClientTime).Seconds()))}, nil
 }
+
+func (s *ProfileService) Location(ctx context.Context, id uuid.UUID, request model.LocationUpdateRequest) (*model.LocationUpdateResponse, error) {
+	if request.Latitude < -90 || request.Latitude > 90 || request.Longitude < -180 || request.Longitude > 180 {
+		return nil, model.ErrBadRequest("latitude or longitude is out of range")
+	}
+	if request.AccuracyMeters < 0 || request.AccuracyMeters > 10000 {
+		return nil, model.ErrBadRequest("accuracy_meters must be between 0 and 10000")
+	}
+	recordedAt := s.now()
+	if err := s.repo.Location(ctx, id, request, recordedAt); err != nil {
+		return nil, err
+	}
+	return &model.LocationUpdateResponse{RecordedAt: recordedAt.In(s.location)}, nil
+}
+
 func (s *ProfileService) History(ctx context.Context, id uuid.UUID, fromValue, toValue, pageValue string) (*model.HistoryResponse, error) {
 	today := s.now().In(s.location)
 	to := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, s.location)

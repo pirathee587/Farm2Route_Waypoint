@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, LogOut } from 'lucide-react';
 import { DesktopAuthView, AuthScreen } from '@/features/auth/DesktopAuthView';
 import { MobileAuthView } from '@/features/auth/MobileAuthView';
-import { authSession } from '@/features/auth/authSession';
 import type { AuthUser } from '@/features/auth/authApi';
 
 export const LoginPage: React.FC = () => {
+  const navigate = useNavigate();
   const [screen, setScreen] = useState<AuthScreen>('login');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
   const [loggedInUser, setLoggedInUser] = useState<{ email: string; role: string } | null>(null);
@@ -24,15 +24,15 @@ export const LoginPage: React.FC = () => {
       navigate('/store-manager');
       return;
     }
-    if (sessionUser?.role === 'DRIVER') {
+    if (user.role === 'DRIVER') {
       window.location.assign('/driver');
       return;
     }
-    if (sessionUser?.role === 'LOADER') {
+    if (user.role === 'LOADER') {
       window.location.assign('/loader');
       return;
     }
-    if (sessionUser?.role === 'DISPATCHER' || sessionUser?.role === 'ADMIN') {
+    if (user.role === 'DISPATCHER' || user.role === 'ADMIN') {
       window.location.assign('/dispatcher/dashboard');
       return;
     }

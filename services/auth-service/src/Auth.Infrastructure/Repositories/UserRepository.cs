@@ -1,5 +1,6 @@
 using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
+using Auth.Domain.Enums;
 using Auth.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,6 +33,17 @@ public class UserRepository : IUserRepository
             .Include(u => u.DriverProfile)
             .Include(u => u.StoreManagerProfile)
             .FirstOrDefaultAsync(u => u.Email == email);
+    }
+
+    public async Task<IReadOnlyList<User>> GetAllByRoleAsync(UserRole role)
+    {
+        return await _context.Users
+            .Include(u => u.DriverProfile)
+            .Include(u => u.DispatcherProfile)
+            .Include(u => u.LoaderProfile)
+            .Include(u => u.StoreManagerProfile)
+            .Where(u => u.Role == role)
+            .ToListAsync();
     }
 
     public async Task<User> CreateAsync(User user)

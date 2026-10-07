@@ -4,15 +4,18 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ── Stage 1: Maven Build ──────────────────────────────────────────────────
-FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+# The gRPC Java protoc plugin is a glibc executable; use the Debian-based
+# Maven image so it can run during source generation.
+FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
 # Copy pom.xml first for dependency layer caching
-COPY pom.xml .
+COPY services/planning-service/pom.xml .
 RUN mvn dependency:go-offline -B --no-transfer-progress
 
-# Copy source
-COPY src ./src
+# Copy source and the shared protobuf contracts used by the Maven generator.
+COPY services/planning-service/src ./src
+COPY proto /proto
 
 # Package — skip tests in Docker build (run in CI separately)
 RUN mvn package -DskipTests -B --no-transfer-progress

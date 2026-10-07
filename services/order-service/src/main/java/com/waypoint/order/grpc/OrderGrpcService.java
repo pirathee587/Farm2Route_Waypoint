@@ -50,7 +50,7 @@ public class OrderGrpcService extends OrderServiceGrpc.OrderServiceImplBase {
                     .collect(Collectors.toSet());
 
             List<Order> orders = orderRepository.findByRequestedDeliveryDateAndStatusIn(
-                    date, List.of(OrderStatus.PENDING, OrderStatus.ALLOCATED)).stream()
+                    date, List.of(OrderStatus.CONFIRMED)).stream()
                 .filter(order -> outletIds == null || outletIds.contains(order.getOutletId()))
                 .map(this::toProto)
                 .toList();
@@ -110,10 +110,21 @@ public class OrderGrpcService extends OrderServiceGrpc.OrderServiceImplBase {
     }
 
     private Order toProto(OrderEntity order) {
+        String products = order.getItems().stream()
+            .map(item -> item.getItemName())
+            .filter(name -> name != null && !name.isBlank())
+            .distinct()
+            .collect(Collectors.joining(", "));
+        int quantity = order.getItems().stream()
+            .mapToInt(item -> item.getQuantity() == null ? 0 : item.getQuantity())
+            .sum();
         return Order.newBuilder()
             .setOrderId(order.getId().toString())
             .setOutletId(order.getOutletId())
             .setBrand(order.getBrand().name())
+            .setProductCode(products)
+            .setQuantity(quantity)
+            .setTempRequirement(order.getOrderType() == null || order.getOrderType().name().equalsIgnoreCase("dry") ? "AMBIENT" : "CHILLED")
             .setPreferredDate(order.getRequestedDeliveryDate().toString())
             .setStatus(order.getStatus().name())
             .setCreatedAt(order.getCreatedAt().toString())

@@ -10,6 +10,7 @@ import com.waypoint.order.dto.OrderDeferralResponse;
 import com.waypoint.order.dto.OrderTimelineEntryResponse;
 import com.waypoint.order.dto.PagedOrdersResponse;
 import com.waypoint.order.dto.ReceiptResponse;
+import com.waypoint.order.dto.EtaResponse;
 import com.waypoint.order.service.OrderService;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -86,5 +87,10 @@ public class OrderController {
     @GetMapping("/{id}/tracking")
     public DeliveryTrackingResponse getLatestTracking(@PathVariable UUID id) {
         return orderService.getLatestTracking(id);
+    }
+
+    @GetMapping("/{id}/eta")
+    public EtaResponse getEta(@PathVariable UUID id) {
+        return orderService.getEta(id);
     }
 }

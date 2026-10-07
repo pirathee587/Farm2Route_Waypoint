@@ -8,26 +8,31 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
+import com.waypoint.order.domain.Brand;
+import com.waypoint.order.repository.OrderRepository;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class OrderValidationServiceTest {
 
-    private static final Instant AT_THREE_PM = Instant.parse("2026-10-03T15:00:00Z");
-    private static final Instant AT_FOUR_PM = Instant.parse("2026-10-03T16:00:00Z");
+    private static final Instant AT_THREE_PM = Instant.parse("2026-10-03T09:30:00Z");
+    private static final Instant AT_FOUR_PM = Instant.parse("2026-10-03T10:30:00Z");
 
     @Test
-    void allowsSameDayOrderBeforeCutoff() {
+    void allowsNextDayOrderBeforeCutoff() {
         var service = serviceAt(AT_THREE_PM);
 
-        service.validateRequestedDate(java.time.LocalDate.of(2026, 10, 3));
+        service.validateRequestedDate(java.time.LocalDate.of(2026, 10, 4));
     }
 
     @Test
-    void rejectsSameDayOrderAtCutoff() {
+    void rejectsNextDayOrderAtCutoff() {
         var service = serviceAt(AT_FOUR_PM);
 
-        assertThatThrownBy(() -> service.validateRequestedDate(java.time.LocalDate.of(2026, 10, 3)))
-            .isInstanceOf(OrderValidationException.class)
-            .hasMessageContaining("4:00 PM cutoff");
+        assertThatThrownBy(() -> service.validateRequestedDate(java.time.LocalDate.of(2026, 10, 4)))
+            .isInstanceOf(CutoffPassedException.class)
+            .hasMessageContaining("16:00 Asia/Colombo")
+            .hasMessageContaining("Submit for 2026-10-05");
     }
 
     @Test
@@ -36,7 +41,7 @@ class OrderValidationServiceTest {
 
         assertThatThrownBy(() -> service.validateRequestedDate(java.time.LocalDate.of(2026, 10, 2)))
             .isInstanceOf(OrderValidationException.class)
-            .hasMessageContaining("past");
+            .hasMessageContaining("Cutoff date has passed");
     }
 
     @Test
@@ -62,6 +67,27 @@ class OrderValidationServiceTest {
         var service = serviceAt(AT_THREE_PM);
 
         assertThat(service.parseOrderType("fresh", "chilled")).isEqualTo(OrderType.chilled);
+    }
+
+    @Test
+    void rejectsSecondFreshOrderOfSameType() {
+        OrderRepository orders = mock(OrderRepository.class);
+        var date = java.time.LocalDate.of(2026, 10, 5);
+        when(orders.countByOutletIdAndRequestedDeliveryDateAndBrandAndOrderType("OUT1", date, Brand.fresh, OrderType.chilled)).thenReturn(1L);
+        var service = new OrderValidationService(Clock.fixed(AT_THREE_PM, ZoneOffset.UTC), orders);
+        assertThatThrownBy(() -> service.validateBrandSchedule("OUT1", date, Brand.fresh, OrderType.chilled))
+            .isInstanceOf(OrderValidationException.class).hasMessageContaining("chilled order");
+    }
+
+    @Test
+    void rejectsSecondStyleOrderInIsoWeek() {
+        OrderRepository orders = mock(OrderRepository.class);
+        var date = java.time.LocalDate.of(2026, 10, 8);
+        when(orders.countByOutletIdAndBrandAndRequestedDeliveryDateBetween("OUT1", Brand.style,
+            java.time.LocalDate.of(2026, 10, 5), java.time.LocalDate.of(2026, 10, 11))).thenReturn(1L);
+        var service = new OrderValidationService(Clock.fixed(AT_THREE_PM, ZoneOffset.UTC), orders);
+        assertThatThrownBy(() -> service.validateBrandSchedule("OUT1", date, Brand.style, null))
+            .isInstanceOf(OrderValidationException.class).hasMessageContaining("one order per week");
     }
 
     private static OrderValidationService serviceAt(Instant instant) {

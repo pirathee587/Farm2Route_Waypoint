@@ -6,6 +6,7 @@ public final class DraftTripDtos {
  public record UpdateTripRequest(LocalDate planningDate,String homeDepot){}
  public record AddOrderRequest(@NotNull UUID orderId){}
  public record AssignVehicleRequest(@NotBlank String vehicleId){}
+ public record AssignDriverRequest(@NotNull UUID driverId){}
  public record UpdateStopsRequest(@NotEmpty List<@NotNull UUID> orderIds){}
  public record DraftOrder(UUID orderId,String outletId,String outletName,double weightKg,double volumeM3,String temperatureRequirement){}
  public record PersistedTripResponse(UUID tripId,String tripCode,String status,LocalDate planningDate,String homeDepot,String vehicleId,UUID driverId,Integer tripNumber,double totalWeight,double totalVolume,List<DraftOrder> orders,List<StopPlan> stops,ValidationResult validation){}

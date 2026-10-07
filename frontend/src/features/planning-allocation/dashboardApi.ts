@@ -144,9 +144,16 @@ interface DashboardApiResponse {
 // ── API Fetch ────────────────────────────────────────────────
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-    const apiData = await apiRequest<DashboardApiResponse>('/planning/dashboard', {
-      signal: AbortSignal.timeout(5000),
-    });
+    const date = new Date().toISOString().slice(0, 10);
+    let apiData: DashboardApiResponse;
+    try {
+      apiData = await apiRequest<DashboardApiResponse>(`/planning/dashboard?date=${date}`);
+    } catch (error) {
+      // A backend container may have just restarted while the gateway is refreshing
+      // its destination. Retry once instead of failing the whole dispatcher landing page.
+      await new Promise(resolve => window.setTimeout(resolve, 750));
+      apiData = await apiRequest<DashboardApiResponse>(`/planning/dashboard?date=${date}`);
+    }
 
     return {
       source: 'REAL_API',

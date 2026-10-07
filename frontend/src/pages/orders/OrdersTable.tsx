@@ -162,6 +162,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                 </td>
                 <td style={{ padding: '16px', verticalAlign: 'top' }}>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{order.id}</div>
+                  {order.productSummary && <div style={{ fontSize:'12px',color:'#475569',marginTop:'4px',fontWeight:600 }}>{order.productSummary}{order.quantity ? ` · Qty ${order.quantity}` : ''}</div>}
                   {order.receivedAt && (
                     <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {order.receivedAt}

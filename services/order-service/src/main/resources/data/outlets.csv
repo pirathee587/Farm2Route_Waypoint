@@ -1,0 +1,7 @@
+outlet_id,name,brand,district,depot,dock_type,parking_constraint,mall_window_open,mall_window_close,window_open_time,window_close_time
+OUT001,Fresh Colombo 01,fresh,Colombo,Peliyagoda,rear_dock,normal,,,06:00,10:00
+OUT002,Fresh Colombo 02,fresh,Colombo,Peliyagoda,street,van_only,,,07:00,11:00
+OUT003,Style Kandy 01,style,Kandy,Kandy,rear_dock,normal,,,08:00,12:00
+OUT004,Tech Kandy 01,tech,Kandy,Kandy,rear_dock,normal,,,09:00,14:00
+OUT005,Fresh Gampaha 01,fresh,Gampaha,Peliyagoda,rear_dock,normal,,,06:30,10:30
+OUT006,Style Colombo Mall,style,Colombo,Peliyagoda,mall_bay,mall_dock,10:00,14:00,10:00,14:00

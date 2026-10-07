@@ -12,6 +12,7 @@ import com.waypoint.order.repository.IssueReportRepository;
 import com.waypoint.order.repository.OrderDeferralRepository;
 import com.waypoint.order.repository.OrderRepository;
 import com.waypoint.order.repository.ReceiptConfirmationRepository;
+import com.waypoint.order.repository.ReceiptLineRepository;
 import com.waypoint.order.repository.UserProfileRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -69,7 +70,7 @@ class OrderServiceOutletIdentityTest {
             mock(OrderRepository.class), profiles, mock(OrderValidationService.class),
             mock(OrderEventPublisher.class), mock(DeliveryTrackingRepository.class),
             mock(OrderDeferralRepository.class), mock(ReceiptConfirmationRepository.class),
-            mock(IssueReportRepository.class));
+            mock(IssueReportRepository.class), mock(ReceiptLineRepository.class));
     }
 
     private static void authenticate(GatewayUserPrincipal principal) {

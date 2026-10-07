@@ -21,7 +21,7 @@ const PageHeader = () => (
       </p>
     </div>
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-      <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Monday, 25 September 2026</span>
+      <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>{new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</span>
       <button style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
         <Bell size={16} color="#64748b" />
         <span style={{ position: 'absolute', top: '8px', right: '8px', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
