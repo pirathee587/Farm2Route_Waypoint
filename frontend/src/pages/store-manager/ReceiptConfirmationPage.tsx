@@ -17,6 +17,7 @@ export function ReceiptConfirmationPage() {
 
   // Checklist state: item id → checked
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [receivedQuantities, setReceivedQuantities] = useState<Record<string, number>>({});
   const [confirmedBy, setConfirmedBy] = useState('');
   const [hasDiscrepancy, setHasDiscrepancy] = useState(false);
 
@@ -34,6 +35,8 @@ export function ReceiptConfirmationPage() {
       .get(id)
       .then((loaded) => {
         setOrder(loaded);
+        setReceivedQuantities(Object.fromEntries(loaded.items.map((item) => [item.id, item.quantity])));
+        setChecked(Object.fromEntries(loaded.items.map((item) => [item.id, true])));
         setPageState('ready');
       })
       .catch((err) => {
@@ -49,6 +52,7 @@ export function ReceiptConfirmationPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!order) return;
     if (!confirmedBy.trim()) {
       setSubmitError('Enter the name of the person confirming receipt.');
       return;
@@ -59,6 +63,10 @@ export function ReceiptConfirmationPage() {
       await ordersApi.createReceipt(id, {
         confirmed_by: confirmedBy.trim(),
         has_discrepancy: hasDiscrepancy,
+        items: order.items.map((item) => ({
+          order_item_id: item.id,
+          received_qty: receivedQuantities[item.id] ?? 0,
+        })),
       });
       setPageState('submitted');
     } catch (err) {
@@ -220,9 +228,13 @@ export function ReceiptConfirmationPage() {
                 >
                   <input
                     checked={checked[item.id] ?? false}
-                    onChange={(e) =>
-                      setChecked((prev) => ({ ...prev, [item.id]: e.target.checked }))
-                    }
+                    onChange={(e) => {
+                      const quantity = e.target.checked ? item.quantity : 0;
+                      const next = { ...receivedQuantities, [item.id]: quantity };
+                      setChecked((prev) => ({ ...prev, [item.id]: e.target.checked }));
+                      setReceivedQuantities(next);
+                      setHasDiscrepancy(order.items.some((line) => (next[line.id] ?? line.quantity) !== line.quantity));
+                    }}
                     type="checkbox"
                   />
                   <span className="receipt-item-info">
@@ -231,6 +243,20 @@ export function ReceiptConfirmationPage() {
                       {item.quantity} {item.unit}
                     </small>
                   </span>
+                  <input
+                    aria-label={`Received quantity for ${item.item_name}`}
+                    max={item.quantity}
+                    min="0"
+                    onChange={(e) => {
+                      const quantity = Math.max(0, Math.min(item.quantity, Number(e.target.value)));
+                      const next = { ...receivedQuantities, [item.id]: quantity };
+                      setReceivedQuantities(next);
+                      setChecked((current) => ({ ...current, [item.id]: quantity === item.quantity }));
+                      setHasDiscrepancy(order.items.some((line) => (next[line.id] ?? line.quantity) !== line.quantity));
+                    }}
+                    type="number"
+                    value={receivedQuantities[item.id] ?? 0}
+                  />
                   {checked[item.id] && (
                     <span className="receipt-item-tick" aria-hidden="true">
                       <Check size={13} />

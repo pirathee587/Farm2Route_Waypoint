@@ -44,7 +44,20 @@ public class OrderEventHandler {
             .orElseGet(DeliveryTrackingEntity::new);
         tracking.setOrderId(order.getId());
         tracking.setStatus(DeliveryTrackingStatus.allocated);
+        tracking.setEta(event.eta());
         tracking.setSourceNote("Dispatch plan - updated " + Instant.now());
+        deliveryTrackingRepository.save(tracking);
+    }
+
+    @Transactional
+    public void handleLoadingCompleted(OrderEventPayload event) {
+        var order = findOrder(event);
+        var tracking = deliveryTrackingRepository
+            .findFirstByOrderIdOrderByUpdatedAtDesc(order.getId())
+            .orElseGet(DeliveryTrackingEntity::new);
+        tracking.setOrderId(order.getId());
+        tracking.setStatus(DeliveryTrackingStatus.loaded);
+        tracking.setSourceNote("Loading completed · " + Instant.now());
         deliveryTrackingRepository.save(tracking);
     }
 

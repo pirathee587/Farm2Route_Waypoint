@@ -6,9 +6,20 @@ import './NewOrderPage.css';
 
 type Brand = 'fresh' | 'style' | 'tech';
 type OrderType = 'dry' | 'chilled';
-type Item = { item_name: string; quantity: number; unit: string };
+type Item = { id: string; item_name: string; quantity: number; unit: string };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const createItem = (): Item => ({
+  id: crypto.randomUUID(),
+  item_name: '',
+  quantity: 1,
+  unit: 'case',
+});
+
+const today = () => {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+};
 
 function cutoffDate(date: string) {
   const cutoff = new Date(`${date}T16:00:00`);
@@ -28,7 +39,7 @@ export function NewOrderPage() {
   const [brand, setBrand] = useState<Brand>('fresh');
   const [orderType, setOrderType] = useState<OrderType>('dry');
   const [requestedDate, setRequestedDate] = useState(today);
-  const [items, setItems] = useState<Item[]>([{ item_name: '', quantity: 1, unit: 'case' }]);
+  const [items, setItems] = useState<Item[]>(() => [createItem()]);
   const [countdown, setCountdown] = useState(() => cutoffDate(today()).getTime() - Date.now());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,10 +51,10 @@ export function NewOrderPage() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setCountdown(cutoffDate(requestedDate).getTime() - Date.now());
+      setCountdown(cutoffDate(today()).getTime() - Date.now());
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [requestedDate]);
+  }, []);
 
   const updateItem = (index: number, field: keyof Item, value: string | number) => {
     setItems((current) => current.map((item, itemIndex) => (
@@ -55,6 +66,9 @@ export function NewOrderPage() {
     const nextErrors: Record<string, string> = {};
     if (brand === 'fresh' && !orderType) {
       nextErrors.order_type = 'Choose Dry or Chilled for fresh orders.';
+    }
+    if (!requestedDate) {
+      nextErrors.requested_delivery_date = 'Choose a requested delivery date.';
     }
     if (sameDayCutoffPassed) {
       nextErrors.requested_delivery_date = 'The 4:00 PM cutoff for same-day orders has passed.';
@@ -78,7 +92,11 @@ export function NewOrderPage() {
         brand,
         order_type: brand === 'fresh' ? orderType : null,
         requested_delivery_date: requestedDate,
-        items,
+        items: items.map((item) => ({
+          item_name: item.item_name,
+          quantity: item.quantity,
+          unit: item.unit,
+        })),
       });
       navigate(`/store-manager/orders/${order.id}/confirmed`);
     } catch (requestError) {
@@ -103,9 +121,9 @@ export function NewOrderPage() {
           <h2>Place a new order</h2>
           <p className="dashboard-subtitle">Tell us what your store needs delivered.</p>
         </div>
-        <div className={`cutoff-clock${sameDayCutoffPassed ? ' is-closed' : ''}`}>
-          <span>{sameDayCutoffPassed ? 'Same-day cutoff passed' : 'Same-day cutoff'}</span>
-          <strong>{sameDayCutoffPassed ? 'Choose a later date' : formatCountdown(countdown)}</strong>
+        <div className={`cutoff-clock${requestedDate === today() && sameDayCutoffPassed ? ' is-closed' : ''}`}>
+          <span>{requestedDate === today() ? (sameDayCutoffPassed ? 'Same-day cutoff passed' : 'Same-day cutoff') : 'Requested delivery'}</span>
+          <strong>{requestedDate === today() ? (sameDayCutoffPassed ? 'Choose a later date' : formatCountdown(countdown)) : requestedDate}</strong>
         </div>
       </div>
 
@@ -150,7 +168,7 @@ export function NewOrderPage() {
           <div className="new-order-section-heading"><span>02</span><div><h3>Items</h3><p>Add each item and the quantity required.</p></div></div>
           <div className="order-items">
             {items.map((item, index) => (
-              <div className="order-item-row" key={`${index}-${item.item_name}`}>
+              <div className="order-item-row" key={item.id}>
                 <label><span>Item name</span><input onChange={(event) => updateItem(index, 'item_name', event.target.value)} placeholder="e.g. Cooking oil" value={item.item_name} />{errors[`item_${index}`] && <em>{errors[`item_${index}`]}</em>}</label>
                 <label className="quantity-field"><span>Qty</span><input min="1" onChange={(event) => updateItem(index, 'quantity', Number(event.target.value))} type="number" value={item.quantity} />{errors[`quantity_${index}`] && <em>{errors[`quantity_${index}`]}</em>}</label>
                 <label><span>Unit</span><input onChange={(event) => updateItem(index, 'unit', event.target.value)} placeholder="case" value={item.unit} />{errors[`unit_${index}`] && <em>{errors[`unit_${index}`]}</em>}</label>
@@ -158,7 +176,7 @@ export function NewOrderPage() {
               </div>
             ))}
           </div>
-          <button className="add-item" onClick={() => setItems((current) => [...current, { item_name: '', quantity: 1, unit: 'case' }])} type="button"><Plus size={16} /> Add another item</button>
+          <button className="add-item" onClick={() => setItems((current) => [...current, createItem()])} type="button"><Plus size={16} /> Add another item</button>
         </section>
 
         <div className="new-order-actions">

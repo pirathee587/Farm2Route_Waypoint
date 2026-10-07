@@ -1,4 +1,5 @@
 using Auth.Domain.Entities;
+using Auth.Domain.Enums;
 
 namespace Auth.Application.Interfaces;
 
@@ -6,6 +7,7 @@ public interface IUserRepository
 {
     Task<User?> GetByIdAsync(Guid id);
     Task<User?> GetByEmailAsync(string email);
+    Task<IReadOnlyList<User>> GetAllByRoleAsync(UserRole role);
     Task<User> CreateAsync(User user);
     Task UpdateAsync(User user);
     Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash, Guid userId);

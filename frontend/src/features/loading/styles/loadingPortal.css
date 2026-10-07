@@ -2,7 +2,9 @@
 
 .loading-portal-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
   background-color: #F8F9FA;
   color: #0F172A;
@@ -13,8 +15,11 @@
 .loading-main-content {
   flex: 1;
   min-width: 0;
+  height: 100vh;
+  min-height: 0;
   padding: 28px 32px 48px 32px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   max-width: 1600px;
 }
 

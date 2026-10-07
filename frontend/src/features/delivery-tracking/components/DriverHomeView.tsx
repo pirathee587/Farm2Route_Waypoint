@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { DriverRunSheet, driverDeliveryApi } from '../driverDeliveryApi';
 import {
   Bell,
   ChevronRight,
@@ -13,17 +14,31 @@ interface DriverHomeViewProps {
   onSelectStop: (stopId: string) => void;
   onOpenNotifications: () => void;
   onOpenMap: () => void;
+  currentUser?: { email: string; role?: string; fullName?: string } | null;
 }
 
 export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
   onSelectStop,
   onOpenNotifications,
   onOpenMap,
+  currentUser,
 }) => {
   const [selectedTrip, setSelectedTrip] = useState<'trip1' | 'trip2'>('trip1');
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [expandedStops, setExpandedStops] = useState<boolean>(false);
   const [callAlert, setCallAlert] = useState<boolean>(false);
+  const [runSheet, setRunSheet] = useState<DriverRunSheet | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    driverDeliveryApi.today()
+      .then((data) => { if (active) setRunSheet(data); })
+      .catch((error) => { if (active) setLoadError(error instanceof Error ? error.message : 'Unable to load today’s runs'); });
+    return () => { active = false; };
+  }, []);
+
+  const activeRun = runSheet?.trips[selectedTrip === 'trip1' ? 0 : 1];
 
   const handleCallDispatcher = () => {
     setCallAlert(true);
@@ -112,6 +127,14 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
 
       {/* Main Inner Content */}
       <div style={{ padding: '20px 20px 0 20px' }}>
+        {loadError && <div role="alert" style={{ color: '#b91c1c', background: '#fee2e2', borderRadius: 12, padding: 12, marginBottom: 12 }}>{loadError}</div>}
+        {activeRun && (
+          <section aria-label="Live run sheet" style={{ background:'#fff',border:'1px solid #e2e8f0',borderRadius:18,padding:14,marginBottom:16 }}>
+            <strong>{runSheet.driver.name} · {runSheet.vehicle.id}</strong>
+            <div style={{fontSize:12,color:'#64748b',margin:'4px 0 10px'}}>Trip {activeRun.trip_number} · {activeRun.completed_stops}/{activeRun.total_stops} stops · {activeRun.status}</div>
+            {activeRun.stops.map((stop) => <button key={stop.stop_id} onClick={() => onSelectStop(stop.stop_id)} type="button" style={{width:'100%',background:'#f8fafc',border:0,borderRadius:12,padding:10,marginTop:6,textAlign:'left'}}><strong>{stop.seq}. {stop.outlet_name}</strong><span style={{float:'right'}}>{stop.status}</span><small style={{display:'block',color:'#64748b'}}>{stop.district} · {stop.window_open}–{stop.window_close}</small></button>)}
+          </section>
+        )}
         {/* Call Dispatcher Feedback Toast */}
         {callAlert && (
           <div
@@ -147,7 +170,7 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
               gap: 6,
             }}
           >
-            Welcome, Kumar <span style={{ fontSize: 26 }}>👋</span>
+            Welcome, {currentUser?.fullName ? currentUser.fullName.split(' ')[0] : 'Kumar'} <span style={{ fontSize: 26 }}>👋</span>
           </h1>
           <p
             style={{
@@ -157,7 +180,7 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
               fontWeight: 500,
             }}
           >
-            Here is your route for today.
+            {currentUser?.fullName ? `${currentUser.fullName} · Driver Portal` : 'Here is your route for today.'}
           </p>
         </div>
 

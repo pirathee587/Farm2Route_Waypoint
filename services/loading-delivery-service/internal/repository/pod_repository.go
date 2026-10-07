@@ -170,7 +170,7 @@ func (r *DriverRepository) ConfirmDelivery(ctx context.Context, driverID, stopID
 	if err != nil {
 		return model.ConfirmDeliveryResponse{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO public.outbox_events(id,aggregate_type,aggregate_id,event_type,payload,status,created_at) VALUES(uuid_generate_v5($1,'delivery-completed'),'DELIVERY',$2::text,'DELIVERY_COMPLETED',jsonb_build_object('trip_id',$3,'trip_code',$3::text,'destination',$4,'completed_at',$5,'outcome',$6,'shortfalls',$7::jsonb),'PENDING',$5) ON CONFLICT(id) DO NOTHING`, actionID, deliveryID, tripID, outletID, effective, outcome, string(shortfallJSON))
+	_, err = tx.Exec(ctx, `INSERT INTO public.outbox_events(id,aggregate_type,aggregate_id,event_type,payload,status,created_at) VALUES(uuid_generate_v5($1,'delivery-completed'),'DELIVERY',$2::text,'DELIVERY_COMPLETED',jsonb_build_object('delivery_id',$2,'trip_id',$3,'trip_code',$3::text,'order_ids',jsonb_build_array($4),'outlet_id',$5,'driver_id',$6,'outcome',$7,'delivered_at',$8,'received_by',$9,'shortfalls',$10::jsonb),'PENDING',$8) ON CONFLICT(id) DO NOTHING`, actionID, deliveryID, tripID, orderID, outletID, driverID, outcome, effective, request.ReceiverName, string(shortfallJSON))
 	if err != nil {
 		return model.ConfirmDeliveryResponse{}, fmt.Errorf("delivery outbox: %w", err)
 	}

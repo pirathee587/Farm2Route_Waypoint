@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import waypointLogoImg from '@/assets/waypoint-logo.png';
+import { authSession } from '@/features/auth/authSession';
 
 export type DispatcherPage =
   | 'dashboard'
@@ -64,6 +65,12 @@ export const DispatcherSidebar: React.FC<DispatcherSidebarProps> = ({
   onNavigate,
   collapsed = false,
 }) => {
+  const handleLogout = () => {
+    authSession.clear();
+    localStorage.removeItem('waypoint_loader_session');
+    window.location.assign('/login');
+  };
+
   return (
     <aside
       className="dispatcher-sidebar"
@@ -270,14 +277,16 @@ export const DispatcherSidebar: React.FC<DispatcherSidebarProps> = ({
         {!collapsed && (
           <button
             type="button"
-            title="Sign out"
-            disabled
+            title="Logout"
+            aria-label="Logout"
+            onClick={handleLogout}
             style={{
               display: 'flex',
               alignItems: 'center',
+              gap: '5px',
               padding: '6px',
               borderRadius: '6px',
-              color: '#64748b', opacity: 0.55, cursor: 'not-allowed',
+              color: '#94a3b8', cursor: 'pointer', background: 'transparent', border: 'none',
               flexShrink: 0,
             }}
             onMouseEnter={(e) => {
@@ -291,6 +300,7 @@ export const DispatcherSidebar: React.FC<DispatcherSidebarProps> = ({
             }}
           >
             <LogOut size={15} />
+            <span style={{ fontSize: '11px', fontWeight: 600 }}>Logout</span>
           </button>
         )}
       </div>

@@ -484,7 +484,7 @@ func (r *LoaderRepository) FetchRawTripsForDateAndDepot(ctx context.Context, dat
 	query := `
 		SELECT
 			t.trip_id,
-			t.vehicle_id,
+			COALESCE(t.vehicle_id, '') AS vehicle_id,
 			COALESCE((
 				SELECT SUM(i.weight_kg)
 				FROM public.load_items i
@@ -524,7 +524,8 @@ func (r *LoaderRepository) FetchRawTripsForDateAndDepot(ctx context.Context, dat
 		LEFT JOIN public.vehicles v ON t.vehicle_id = v.vehicle_id
 		LEFT JOIN public.user_profiles u ON t.driver_id = u.id
 		LEFT JOIN public.loading_confirmations lc ON t.trip_id = lc.trip_id
-		WHERE ($1 = '' OR t.delivery_date = $1::DATE OR t.delivery_date = CURRENT_DATE)
+		WHERE ($1 = '' OR t.delivery_date = $1::DATE OR t.delivery_date = CURRENT_DATE
+		       OR lc.status::TEXT IN ('PENDING','LOADING'))
 		  AND ($2 = '' OR LOWER(COALESCE(v.depot,'')) = LOWER($2)
 		       OR ($2 = 'Peliyagoda' AND LOWER(COALESCE(v.depot,'')) IN ('depot-01','peliyagoda'))
 		       OR ($2 = 'Kandy' AND LOWER(COALESCE(v.depot,'')) LIKE '%kandy%'))
@@ -702,7 +703,7 @@ func (r *LoaderRepository) GetStopsWithProgressByTripID(ctx context.Context, tri
 	}
 	defer rows.Close()
 
-	var stopDtos []model.LoadStopDetailDTO
+	stopDtos := make([]model.LoadStopDetailDTO, 0)
 	earlierStopsLoaded := true
 
 	for rows.Next() {
@@ -753,7 +754,7 @@ func (r *LoaderRepository) GetStopsWithProgressByTripID(ctx context.Context, tri
 
 		// Stop tags are derived from outlet brand and stop-level handling needs;
 		// item tags remain item-specific and are never unioned across a stop.
-		var tags []string
+		tags := make([]string, 0)
 		seen := make(map[string]bool)
 		if clean := strings.TrimSpace(outletBrand); clean != "" {
 			seen[clean] = true
@@ -1172,7 +1173,8 @@ func (r *LoaderRepository) CheckItem(ctx context.Context, itemID uuid.UUID, chec
 		newLoadedQty = expectedQty
 		_, err = r.pool.Exec(ctx, `
 			UPDATE public.load_items
-			SET status = $1, loaded_qty = $2, checked_at = NOW(), checked_by = $3, updated_at = NOW()
+			SET status = $1, loaded_qty = $2, checked_at = NOW(),
+			    checked_by = (SELECT id FROM public.user_profiles WHERE id = $3), updated_at = NOW()
 			WHERE item_id = $4
 		`, newStatus, newLoadedQty, loaderID, itemID)
 	} else {
@@ -1659,20 +1661,6 @@ func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.
 		return nil, fmt.Errorf("failed to query issue flags: %w", err)
 	}
 
-	func (r *LoaderRepository) ResolveShortfall(ctx context.Context, issueID uuid.UUID, resolvedBy uuid.UUID, notes string) error {
-		command, err := r.pool.Exec(ctx, `
-			UPDATE public.issue_flags
-			SET resolved = TRUE, resolved_by = $2, resolved_at = NOW(), resolution_notes = $3
-			WHERE issue_id = $1 AND resolved = FALSE
-		`, issueID, resolvedBy, notes)
-		if err != nil {
-			return fmt.Errorf("failed to resolve shortfall: %w", err)
-		}
-		if command.RowsAffected() == 0 {
-			return model.ErrNotFound("Shortfall not found or already resolved")
-		}
-		return nil
-	}
 	defer rows.Close()
 
 	var flags []model.ShortfallDetailDTO
@@ -1733,6 +1721,21 @@ func (r *LoaderRepository) GetShortfallsByTrip(ctx context.Context, tripID uuid.
 		})
 	}
 	return flags, rows.Err()
+}
+
+func (r *LoaderRepository) ResolveShortfall(ctx context.Context, issueID uuid.UUID, resolvedBy uuid.UUID, notes string) error {
+	command, err := r.pool.Exec(ctx, `
+		UPDATE public.issue_flags
+		SET resolved = TRUE, resolved_by = $2, resolved_at = NOW(), resolution_notes = $3
+		WHERE issue_id = $1 AND resolved = FALSE
+	`, issueID, resolvedBy, notes)
+	if err != nil {
+		return fmt.Errorf("failed to resolve shortfall: %w", err)
+	}
+	if command.RowsAffected() == 0 {
+		return model.ErrNotFound("Shortfall not found or already resolved")
+	}
+	return nil
 }
 
 // ResetDemoState restores trip WPT-204 AND every other demo trip (TRC-176, TRC-189, etc.) to initial demo state

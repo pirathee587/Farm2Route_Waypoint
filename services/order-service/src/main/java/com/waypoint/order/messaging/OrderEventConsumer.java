@@ -17,7 +17,14 @@ public class OrderEventConsumer {
         queues = "${waypoint.rabbitmq.queues.allocation-completed}",
         ackMode = "AUTO")
     public void onAllocationCompleted(OrderEventPayload event) {
-        eventHandler.handleAllocationCompleted(event);
+        if (event.orderId() != null) {
+            eventHandler.handleAllocationCompleted(event);
+            return;
+        }
+        if (event.orderIds() == null || event.orderIds().isEmpty()) {
+            throw new IllegalArgumentException("Allocation event is missing order IDs");
+        }
+        event.orderIds().forEach(orderId -> eventHandler.handleAllocationCompleted(event.forOrder(orderId)));
     }
 
     @RabbitListener(
@@ -25,6 +32,11 @@ public class OrderEventConsumer {
         ackMode = "AUTO")
     public void onOrderDeferred(OrderEventPayload event) {
         eventHandler.handleOrderDeferred(event);
+    }
+
+    @RabbitListener(queues = "${waypoint.rabbitmq.queues.loading-completed}", ackMode = "AUTO")
+    public void onLoadingCompleted(OrderEventPayload event) {
+        eventHandler.handleLoadingCompleted(event);
     }
 
     @RabbitListener(

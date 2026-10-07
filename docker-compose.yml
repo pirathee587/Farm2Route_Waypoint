@@ -107,8 +107,10 @@ services:
 
   planning-service:
     build:
-      context: ./services/planning-service
-      dockerfile: Dockerfile
+      # The Maven build generates gRPC sources from the repository-level
+      # proto/ directory, so the build context must include the repo root.
+      context: .
+      dockerfile: services/planning-service/Dockerfile
     container_name: waypoint-planning
     restart: unless-stopped
     env_file:
@@ -136,8 +138,8 @@ services:
 
   order-service:
     build:
-      context: ./services/order-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/order-service/Dockerfile
     container_name: waypoint-order
     restart: unless-stopped
     env_file:

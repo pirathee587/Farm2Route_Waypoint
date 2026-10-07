@@ -14,6 +14,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -55,8 +56,17 @@ public class OrderEntity {
     @Column(name = "preferred_date")
     private LocalDate preferredDate;
 
+    @Column(name = "weight_kg")
+    private BigDecimal weightKg;
+
+    @Column(name = "volume_m3")
+    private BigDecimal volumeM3;
+
     @Column(name = "cutoff_enforced", nullable = false)
     private boolean cutoffEnforced;
+
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -72,6 +82,9 @@ public class OrderEntity {
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;
+        if (status == OrderStatus.CONFIRMED) {
+            confirmedAt = now;
+        }
     }
 
     @PreUpdate
@@ -100,8 +113,14 @@ public class OrderEntity {
     public void setCreatedByUserId(String createdByUserId) { this.createdByUserId = createdByUserId; }
     public LocalDate getPreferredDate() { return preferredDate; }
     public void setPreferredDate(LocalDate preferredDate) { this.preferredDate = preferredDate; }
+    public BigDecimal getWeightKg() { return weightKg; }
+    public void setWeightKg(BigDecimal weightKg) { this.weightKg = weightKg; }
+    public BigDecimal getVolumeM3() { return volumeM3; }
+    public void setVolumeM3(BigDecimal volumeM3) { this.volumeM3 = volumeM3; }
     public boolean isCutoffEnforced() { return cutoffEnforced; }
     public void setCutoffEnforced(boolean cutoffEnforced) { this.cutoffEnforced = cutoffEnforced; }
+    public Instant getConfirmedAt() { return confirmedAt; }
+    public void setConfirmedAt(Instant confirmedAt) { this.confirmedAt = confirmedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public List<OrderItemEntity> getItems() { return items; }

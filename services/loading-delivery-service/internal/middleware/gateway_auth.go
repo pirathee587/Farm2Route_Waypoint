@@ -139,3 +139,21 @@ func RequireDriver(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// RequireDeliveryAccess gives drivers write access while dispatchers/admins can
+// inspect delivery state without mutating it.
+func RequireDeliveryAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := GetUserFromContext(r.Context())
+		if !ok { model.ErrUnauthorized("User identity not found in context").WriteJSON(w); return }
+		switch user.Role {
+		case "DRIVER":
+			next.ServeHTTP(w, r)
+		case "DISPATCHER", "ADMIN":
+			if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions { next.ServeHTTP(w, r); return }
+			model.ErrForbidden("Dispatchers and admins have read-only delivery access").WriteJSON(w)
+		default:
+			model.ErrForbidden("Delivery access required").WriteJSON(w)
+		}
+	})
+}

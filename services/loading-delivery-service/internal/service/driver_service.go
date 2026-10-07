@@ -47,12 +47,15 @@ func (s *DriverService) SavePODUpload(ctx context.Context, driverID, stopID uuid
 	return s.repo.SavePODUpload(ctx, driverID, stopID, kind, url, receiver, s.now())
 }
 func (s *DriverService) ConfirmDelivery(ctx context.Context, driverID, stopID uuid.UUID, request model.ConfirmDeliveryRequest) (*model.ConfirmDeliveryResponse, error) {
-	return s.confirmDelivery(ctx, driverID, stopID, request, false, false)
+	return s.confirmDelivery(ctx, driverID, stopID, request, false, false, false)
+}
+func (s *DriverService) ConfirmDeliveryFlexible(ctx context.Context, driverID, stopID uuid.UUID, request model.ConfirmDeliveryRequest) (*model.ConfirmDeliveryResponse, error) {
+	return s.confirmDelivery(ctx, driverID, stopID, request, false, false, true)
 }
 func (s *DriverService) ConfirmDeliveryOffline(ctx context.Context, driverID, stopID uuid.UUID, request model.ConfirmDeliveryRequest, mediaPending bool) (*model.ConfirmDeliveryResponse, error) {
-	return s.confirmDelivery(ctx, driverID, stopID, request, true, mediaPending)
+	return s.confirmDelivery(ctx, driverID, stopID, request, true, mediaPending, false)
 }
-func (s *DriverService) confirmDelivery(ctx context.Context, driverID, stopID uuid.UUID, request model.ConfirmDeliveryRequest, offline, mediaPending bool) (*model.ConfirmDeliveryResponse, error) {
+func (s *DriverService) confirmDelivery(ctx context.Context, driverID, stopID uuid.UUID, request model.ConfirmDeliveryRequest, offline, mediaPending, allowSingleProof bool) (*model.ConfirmDeliveryResponse, error) {
 	action, err := uuid.Parse(request.ClientActionID)
 	if err != nil {
 		return nil, model.ErrBadRequest("client_action_id must be a valid UUID")
@@ -70,8 +73,11 @@ func (s *DriverService) confirmDelivery(ctx context.Context, driverID, stopID uu
 	if err != nil {
 		return nil, err
 	}
-	if !mediaPending && (!x.SignatureURLs[request.SignatureURL] || !x.PhotoURLs[request.PhotoURL]) {
-		return nil, model.NewAppError(model.ErrCodeValidationFailed, "signature_url and photo_url must belong to this stop", 422)
+	if !mediaPending && ((!allowSingleProof && (request.SignatureURL == "" || request.PhotoURL == "")) || (allowSingleProof && request.SignatureURL == "" && request.PhotoURL == "")) {
+		return nil, model.NewAppError(model.ErrCodeValidationFailed, "required proof is missing", 422)
+	}
+	if !mediaPending && ((request.SignatureURL != "" && !x.SignatureURLs[request.SignatureURL]) || (request.PhotoURL != "" && !x.PhotoURLs[request.PhotoURL])) {
+		return nil, model.NewAppError(model.ErrCodeValidationFailed, "proof files must belong to this stop", 422)
 	}
 	ordered := map[string]int{}
 	for _, i := range x.Items {
@@ -107,6 +113,9 @@ func (s *DriverService) confirmDelivery(ctx context.Context, driverID, stopID uu
 	outcome := "DELIVERED"
 	if len(request.Shortfalls) > 0 {
 		outcome = "PARTIAL"
+	}
+	if request.Outcome != "" && request.Outcome != outcome {
+		return nil, model.NewAppError(model.ErrCodeValidationFailed, "outcome must be DELIVERED or PARTIAL and match delivered quantities", 422)
 	}
 	server := s.now()
 	effective := server
@@ -222,6 +231,7 @@ func NewDriverService(repo DriverTodayRepository) *DriverService {
 }
 
 func (s *DriverService) Arrive(ctx context.Context, driverID, stopID uuid.UUID, request model.ArriveRequest) (*model.ArrivalResponse, error) {
+	if request.ArrivedAt == nil { request.ArrivedAt = request.ClientTime }
 	actionID, err := uuid.Parse(request.ClientActionID)
 	if err != nil {
 		return nil, model.ErrBadRequest("client_action_id must be a valid UUID")
@@ -363,12 +373,22 @@ func (s *DriverService) TripStops(ctx context.Context, driverID, tripID uuid.UUI
 	x := buildDriverTrip(rec, stops)
 	return &x, nil
 }
+func (s *DriverService) StartTrip(ctx context.Context, driverID, tripID uuid.UUID, operationID string) (*model.TripStartResponse, error) {
+	op, err := uuid.Parse(operationID)
+	if err != nil { return nil, model.ErrBadRequest("Idempotency-Key must be a valid UUID") }
+	starter, ok := s.repo.(interface { StartTrip(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, time.Time) (model.TripStartResponse, error) })
+	if !ok { return nil, model.ErrInternal("trip start is unavailable") }
+	result, err := starter.StartTrip(ctx, driverID, tripID, op, s.now())
+	if errors.Is(err, repository.ErrDriverTripForbidden) { return nil, model.ErrForbidden("Trip belongs to another driver") }
+	if err != nil { return nil, err }
+	return &result, nil
+}
 func (s *DriverService) DispatcherContact(ctx context.Context, id uuid.UUID) (model.DispatcherContact, error) {
 	return s.repo.GetDispatcherContact(ctx, id)
 }
 
 func buildDriverTrip(rec model.DriverTripRecord, raw []model.DriverStopRecord) model.DriverTrip {
-	t := model.DriverTrip{ID: rec.ID, TripNumber: rec.TripNumber, Status: rec.Status, Stops: make([]model.DriverStop, 0, len(raw))}
+	t := model.DriverTrip{ID: rec.ID, TripNumber: rec.TripNumber, Status: rec.Status, ReadyAt: rec.ReadyAt, Startable: rec.ReadyAt != nil, Stops: make([]model.DriverStop, 0, len(raw))}
 	inProgressSet := false
 	for _, r := range raw {
 		status := "PENDING"

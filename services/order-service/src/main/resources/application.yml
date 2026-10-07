@@ -92,14 +92,18 @@ waypoint:
     exchange: waypoint.events
     queues:
       order-placed: order.placed
+      order-pending: order.pending
       allocation-completed: allocation.completed
       order-deferred: order-service.order-deferred
       delivery-completed: order-service.delivery-completed
+      loading-completed: order-service.loading-completed
     routing-keys:
       order-placed: order.placed
+      order-pending: order.pending
       allocation-completed: allocation.completed
       order-deferred: order.deferred
       delivery-completed: delivery.completed
+      loading-completed: loading.completed
 
 logging:
   level:

@@ -28,11 +28,13 @@ public class ReferenceRepository implements PlanningMasterDataPort {
     public OrderRef getOrder(UUID id) {
         var l = jdbc.query("""
             SELECT o.id AS order_id,o.outlet_id,x.name outlet_name,x.district,x.depot,x.parking_type,
-                   x.lat::double precision lat,x.lng::double precision lng,o.product_code,o.quantity,
+                   x.lat::double precision lat,x.lng::double precision lng,COALESCE(o.product_code,items.product_code) product_code,COALESCE(o.quantity,items.quantity,0) quantity,
                    o.weight_kg::double precision weight_kg,o.volume_m3::double precision volume_m3,
-                   o.brand,o.temp_requirement::text temp_requirement,o.preferred_date,o.window_open,o.window_close,
+                   o.brand,COALESCE(o.temp_requirement::text,CASE WHEN o.order_type::text='chilled' THEN 'CHILLED' ELSE 'AMBIENT' END) temp_requirement,COALESCE(o.preferred_date,o.requested_delivery_date) preferred_date,o.window_open,o.window_close,
                    o.status::text order_status
-            FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id WHERE o.id=?
+            FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id
+            LEFT JOIN LATERAL (SELECT string_agg(oi.item_name,', ' ORDER BY oi.item_name) product_code,SUM(oi.quantity)::int quantity FROM public.order_items oi WHERE oi.order_id=o.id) items ON true
+            WHERE o.id=?
             """, this::mapOrder, id);
         if(l.isEmpty()) throw new PlanningException(404,"Order not found: "+id);
         return l.getFirst();
@@ -46,12 +48,13 @@ public class ReferenceRepository implements PlanningMasterDataPort {
     public List<OrderRef> listPlanningOrders(LocalDate date) {
         return jdbc.query("""
             SELECT o.id AS order_id,o.outlet_id,x.name outlet_name,x.district,x.depot,x.parking_type,
-                   x.lat::double precision lat,x.lng::double precision lng,o.product_code,o.quantity,
+                   x.lat::double precision lat,x.lng::double precision lng,COALESCE(o.product_code,items.product_code) product_code,COALESCE(o.quantity,items.quantity,0) quantity,
                    o.weight_kg::double precision weight_kg,o.volume_m3::double precision volume_m3,
-                   o.brand,o.temp_requirement::text temp_requirement,o.preferred_date,o.window_open,o.window_close,
+                   o.brand,COALESCE(o.temp_requirement::text,CASE WHEN o.order_type::text='chilled' THEN 'CHILLED' ELSE 'AMBIENT' END) temp_requirement,COALESCE(o.preferred_date,o.requested_delivery_date) preferred_date,o.window_open,o.window_close,
                    o.status::text order_status
             FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id
-            WHERE o.preferred_date=? ORDER BY o.window_close,o.created_at
+            LEFT JOIN LATERAL (SELECT string_agg(oi.item_name,', ' ORDER BY oi.item_name) product_code,SUM(oi.quantity)::int quantity FROM public.order_items oi WHERE oi.order_id=o.id) items ON true
+            WHERE COALESCE(o.preferred_date,o.requested_delivery_date)=? ORDER BY o.window_close NULLS LAST,o.created_at
             """, this::mapOrder, date);
     }
 

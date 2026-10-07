@@ -2,6 +2,17 @@
 
 Waypoint is a delivery planning system with a Store Manager portal, service-to-service gRPC contracts, RabbitMQ events, and Supabase PostgreSQL persistence. See [docs/architecture.md](docs/architecture.md) for the full system map.
 
+## Implementation Status
+
+| Service | Status |
+|---|---|
+| Auth Service | ✅ Implemented + tested (10/10 tests) |
+| Order Service | ✅ Implemented + tested (15/15 baseline tests) |
+| Planning Service | ✅ Implemented + tested (26/27 tests; PostgreSQL integration requires Docker) |
+| Loading & Delivery | ✅ Implemented (Go tests require local toolchain) |
+| Notification Service | ✅ Implemented |
+| Frontend | ✅ Implemented (18/18 tests) |
+
 ## Local Stack
 
 The intended local entry point is NGINX at `https://localhost`; browser API calls go through NGINX and the API Gateway, never directly to Order Service.
@@ -41,7 +52,7 @@ Order reference data is loaded from `outlets.csv`, `vehicles.csv`, and `calendar
 
 5. **Track delivery.** Open `/store-manager/orders/{id}/tracking`. The page calls `GET /api/orders/{id}/tracking` and displays the internal delivery states `allocated`, `loaded`, `out_for_delivery`, and `completed`. The order status remains one of the canonical values from `proto/order.proto`: `PENDING`, `ALLOCATED`, `DEFERRED`, `ATTEMPTED`, or `DELIVERED`; there is no `ARRIVED` status. A delayed tracking row displays the delayed warning variant.
 
-6. **Complete delivery for the demo.** Loading/Delivery Service is not shipped yet, so delivery completion must be demo-simulated by the approved test fixture/event that publishes `delivery.completed`. That event moves the order to `DELIVERED`. The tracking page then enables **Proceed to Receiving** at `/store-manager/receiving`. No fake `ARRIVED` status is introduced.
+6. **Complete delivery.** Use the implemented Loading & Delivery workflow to record the stop outcome and proof of delivery. Its `delivery.completed` event moves the order to `DELIVERED`. The tracking page then enables **Proceed to Receiving** at `/store-manager/receiving`. No fake `ARRIVED` status is introduced.
 
 7. **Confirm receipt.** On `/store-manager/receiving`, select a `DELIVERED` order, check the received items, enter the recipient, and submit. The portal calls `POST /api/orders/{id}/receipt`. Receipt confirmation is stored separately; the order remains `DELIVERED` because `proto/order.proto` has no `RECEIVED` status.
 

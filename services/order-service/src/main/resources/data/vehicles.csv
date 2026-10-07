@@ -1,0 +1,7 @@
+vehicle_id,registration,type,temp,weight_cap_kg,volume_cap_m3,fuel_type,km_per_l,weekly_fuel_quota_l,depot,brand
+VEH001,WP-NA-1001,truck,reefer,5000,24,diesel,6.5,220,Peliyagoda,fresh
+VEH002,WP-NB-1002,van,reefer,1800,10,diesel,9.0,150,Peliyagoda,fresh
+VEH003,WP-NC-1003,truck,ambient,4500,22,diesel,7.0,200,Peliyagoda,style
+VEH004,CP-ND-1004,van,ambient,1600,9,diesel,10.0,130,Kandy,style
+VEH005,CP-NE-1005,truck,ambient,4000,20,diesel,7.5,180,Kandy,tech
+VEH006,WP-NF-1006,van,ambient,1400,8,petrol,11.0,120,Peliyagoda,tech

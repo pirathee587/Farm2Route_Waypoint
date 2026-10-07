@@ -180,6 +180,7 @@ export const UnplannedOrdersColumn: React.FC<UnplannedOrdersColumnProps> = ({ or
                     </span>
                   </div>
                 </div>
+                <div style={{ fontSize:'12px',fontWeight:600,color:'#475569',marginBottom:'8px' }}>{order.productSummary || 'Order items'}{order.quantity ? ` · Qty ${order.quantity}` : ''}</div>
 
                 {/* Outlet name & Route */}
                 <div style={{ marginBottom: '12px' }}>

@@ -3,7 +3,7 @@ import { authSession } from '@/features/auth/authSession';
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
   }
 }
@@ -24,7 +24,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.message || 'Request failed');
+    const message = body.message || body.error || body.title || `Request failed (${response.status})`;
+    throw new ApiError(response.status, message, body.code);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -106,12 +107,29 @@ export interface CreatedOrder {
 export interface CreateReceiptRequest {
   confirmed_by: string;
   has_discrepancy: boolean;
+  items: Array<{ order_item_id: string; received_qty: number }>;
 }
 
 export interface CreateIssueRequest {
-  issue_type: 'missing' | 'damaged' | 'wrong_item' | 'late';
+  issue_type: 'damaged' | 'short' | 'wrong';
   description: string;
   photo_url: string | null;
+}
+
+export interface OrderEta {
+  order_id: string;
+  expected_arrival_time: string | null;
+  delayed: boolean;
+}
+
+export interface OutletReference {
+  outlet_id: string; name: string; district: string; depot: string; parking_type: string;
+  lat: number | null; lng: number | null;
+}
+
+export interface VehicleReference {
+  vehicle_id: string; registration: string; type: string; weight_cap_kg: number;
+  volume_cap_m3: number; temp_capability: string; depot: string; brand: string;
 }
 
 export const ordersApi = {
@@ -143,6 +161,10 @@ export const ordersApi = {
     return apiRequest<DeliveryTracking>(`/orders/${orderId}/tracking`);
   },
 
+  getEta(orderId: string) {
+    return apiRequest<OrderEta>(`/orders/${orderId}/eta`);
+  },
+
   create(request: CreateOrderRequest) {
     return apiRequest<CreatedOrder>('/orders', {
       method: 'POST',
@@ -163,4 +185,10 @@ export const ordersApi = {
       body: JSON.stringify(request),
     });
   },
+};
+
+export const referenceApi = {
+  getMyOutlet: () => apiRequest<OutletReference>('/outlets/me'),
+  listOutlets: () => apiRequest<OutletReference[]>('/outlets'),
+  listVehicles: () => apiRequest<VehicleReference[]>('/vehicles'),
 };

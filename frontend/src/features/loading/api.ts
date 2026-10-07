@@ -12,7 +12,7 @@ import type {
   TripDetail,
 } from './types';
 
-const base = '/api/loading';
+const base = '/loading';
 interface LatestPlanChange { revision: number; }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -1,11 +1,10 @@
 ﻿# Seed Data
 
-Place the Challenge Booklet datasets here:
+The repository includes synthetic Challenge Booklet-compatible datasets:
 
 - `outlets.csv`
 - `vehicles.csv`
 - `calendar.csv`
 
-The Order Service does not run a Java startup seeder. Load these files with
-`seed.sql` through `psql` from this directory so the same files can also be
-validated independently before a judge run.
+`ReferenceDataSeeder` loads each dataset on startup when its destination table
+is empty. `seed.sql` remains available for independent `psql` loading.

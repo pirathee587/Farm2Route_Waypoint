@@ -282,10 +282,18 @@ func (r *DepartureRepository) MarkReady(ctx context.Context, tripID uuid.UUID, l
 	now := time.Now().UTC()
 	if _, err := tx.Exec(ctx, `
 		UPDATE public.loading_confirmations
-		SET status = 'LOADED', ready_at = $2, ready_by = $3, updated_at = NOW()
+		SET status = 'LOADED', ready_at = $2,
+		    ready_by = (SELECT id FROM public.user_profiles WHERE id = $3), updated_at = NOW()
 		WHERE trip_id = $1
 	`, tripID, now, loaderID); err != nil {
 		return nil, fmt.Errorf("mark-ready: update confirmation: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE public.trips
+		SET status = 'READY_FOR_LOADING', ready_at = $2, updated_at = NOW()
+		WHERE trip_id = $1
+	`, tripID, now); err != nil {
+		return nil, fmt.Errorf("mark-ready: update trip readiness: %w", err)
 	}
 
 	// 5. Resolve loader display name
@@ -296,7 +304,8 @@ func (r *DepartureRepository) MarkReady(ctx context.Context, tripID uuid.UUID, l
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO public.load_activity_log
 		    (trip_id, event_type, title, description, icon_type, logged_at, created_by)
-		VALUES ($1, 'CONFIRMATION', 'Loading confirmation recorded', $2, 'check', $3, $4)
+		VALUES ($1, 'CONFIRMATION', 'Loading confirmation recorded', $2, 'check', $3,
+		        (SELECT id FROM public.user_profiles WHERE id = $4))
 	`, tripID, logDesc, now, loaderID); err != nil {
 		return nil, fmt.Errorf("mark-ready: activity log: %w", err)
 	}
@@ -323,7 +332,7 @@ func (r *DepartureRepository) MarkReady(ctx context.Context, tripID uuid.UUID, l
 		INSERT INTO public.outbox_events
 		    (aggregate_type, aggregate_id, event_type, payload, status)
 		VALUES ('TRIP', $1, 'LOADING_COMPLETED', $2, 'PENDING')
-	`, tripID.String(), payloadBytes); err != nil {
+	`, tripID.String(), string(payloadBytes)); err != nil {
 		return nil, fmt.Errorf("mark-ready: outbox insert: %w", err)
 	}
 

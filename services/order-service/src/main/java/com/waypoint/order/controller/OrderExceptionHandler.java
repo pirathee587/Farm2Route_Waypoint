@@ -5,6 +5,7 @@ import com.waypoint.order.service.OutletNotFoundException;
 import com.waypoint.order.service.VehicleNotFoundException;
 import com.waypoint.order.service.OrderConflictException;
 import com.waypoint.order.service.OrderValidationException;
+import com.waypoint.order.service.CutoffPassedException;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class OrderExceptionHandler {
+
+    @ExceptionHandler(CutoffPassedException.class)
+    ResponseEntity<Map<String, String>> handleCutoff(CutoffPassedException exception) {
+        return ResponseEntity.unprocessableEntity()
+            .body(Map.of("code", "CUTOFF_PASSED", "error", "Validation failed", "message", exception.getMessage()));
+    }
 
     @ExceptionHandler(OrderConflictException.class)
     ResponseEntity<Map<String, String>> handleConflict(OrderConflictException exception) {

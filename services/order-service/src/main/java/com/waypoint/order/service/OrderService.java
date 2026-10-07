@@ -16,22 +16,26 @@ import com.waypoint.order.domain.IssueReportEntity;
 import com.waypoint.order.domain.IssueReportType;
 import com.waypoint.order.domain.OrderDeferralEntity;
 import com.waypoint.order.domain.ReceiptConfirmationEntity;
+import com.waypoint.order.domain.ReceiptLineEntity;
 import com.waypoint.order.dto.CreateIssueRequest;
 import com.waypoint.order.dto.CreateReceiptRequest;
 import com.waypoint.order.dto.IssueResponse;
 import com.waypoint.order.dto.ReceiptResponse;
+import com.waypoint.order.dto.EtaResponse;
 import com.waypoint.order.messaging.OrderEventPublisher;
 import com.waypoint.order.repository.DeliveryTrackingRepository;
 import com.waypoint.order.repository.IssueReportRepository;
 import com.waypoint.order.repository.OrderDeferralRepository;
 import com.waypoint.order.repository.OrderRepository;
 import com.waypoint.order.repository.ReceiptConfirmationRepository;
+import com.waypoint.order.repository.ReceiptLineRepository;
 import com.waypoint.order.repository.UserProfileRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.math.BigDecimal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -57,6 +61,7 @@ public class OrderService {
     private final OrderDeferralRepository orderDeferralRepository;
     private final ReceiptConfirmationRepository receiptConfirmationRepository;
     private final IssueReportRepository issueReportRepository;
+    private final ReceiptLineRepository receiptLineRepository;
 
     public OrderService(
         OrderRepository orderRepository,
@@ -66,7 +71,8 @@ public class OrderService {
         DeliveryTrackingRepository deliveryTrackingRepository,
         OrderDeferralRepository orderDeferralRepository,
         ReceiptConfirmationRepository receiptConfirmationRepository,
-        IssueReportRepository issueReportRepository) {
+        IssueReportRepository issueReportRepository,
+        ReceiptLineRepository receiptLineRepository) {
         this.orderRepository = orderRepository;
         this.userProfileRepository = userProfileRepository;
         this.validationService = validationService;
@@ -75,6 +81,7 @@ public class OrderService {
         this.orderDeferralRepository = orderDeferralRepository;
         this.receiptConfirmationRepository = receiptConfirmationRepository;
         this.issueReportRepository = issueReportRepository;
+        this.receiptLineRepository = receiptLineRepository;
     }
 
     @Transactional
@@ -86,6 +93,7 @@ public class OrderService {
         var brand = validationService.parseBrand(request.brand());
         var orderType = validationService.parseOrderType(request.brand(), request.order_type());
         validationService.validateRequestedDate(request.requested_delivery_date());
+        validationService.validateBrandSchedule(outletId, request.requested_delivery_date(), brand, orderType);
 
         var order = new OrderEntity();
         order.setOutletId(outletId);
@@ -93,9 +101,16 @@ public class OrderService {
         order.setOrderType(orderType);
         order.setRequestedDeliveryDate(request.requested_delivery_date());
         order.setPreferredDate(request.requested_delivery_date());
-        order.setStatus(OrderStatus.PENDING);
+        order.setStatus(OrderStatus.CONFIRMED);
+        order.setConfirmedAt(Instant.now());
         order.setCreatedByUserId(user.userId());
         order.setCutoffEnforced(true);
+
+        double unitWeight = brand.name().equals("tech") ? 2.5 : brand.name().equals("style") ? 0.5 : orderType != null && orderType.name().equals("chilled") ? 1.0 : 0.75;
+        double unitVolume = brand.name().equals("tech") ? 0.012 : brand.name().equals("style") ? 0.003 : orderType != null && orderType.name().equals("chilled") ? 0.006 : 0.004;
+        int totalUnits = request.items().stream().mapToInt(item -> item.quantity()).sum();
+        order.setWeightKg(BigDecimal.valueOf(totalUnits * unitWeight));
+        order.setVolumeM3(BigDecimal.valueOf(totalUnits * unitVolume));
 
         request.items().forEach(itemRequest -> {
             var item = new OrderItemEntity();
@@ -124,14 +139,16 @@ public class OrderService {
             throw new OrderValidationException("size must be greater than zero");
         }
         size = Math.min(size, 100);
-        String outletId = authenticatedOutletId();
+        String outletId = canReadAllOrders() ? null : authenticatedOutletId();
         OrderStatus requestedStatus = parseStatus(status);
         String searchTerm = search == null || search.isBlank() ? null : search.trim().toLowerCase();
 
         Specification<OrderEntity> specification = (root, query, criteriaBuilder) -> {
             query.distinct(true);
             var predicates = new ArrayList<jakarta.persistence.criteria.Predicate>();
-            predicates.add(criteriaBuilder.equal(root.get("outletId"), outletId));
+            if (outletId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("outletId"), outletId));
+            }
             if (requestedStatus != null) {
                 predicates.add(criteriaBuilder.equal(root.get("status"), requestedStatus));
             }
@@ -159,7 +176,11 @@ public class OrderService {
         OrderEntity order = accessibleOrder(id);
         List<OrderTimelineEntryResponse> entries = new ArrayList<>();
         entries.add(new OrderTimelineEntryResponse(
-            "placed", "PENDING", order.getCreatedAt(), "Order created"));
+            "PLACED", "PENDING", order.getCreatedAt(), "Order created"));
+        if (order.getConfirmedAt() != null) {
+            entries.add(new OrderTimelineEntryResponse(
+                "CONFIRMED", "CONFIRMED", order.getConfirmedAt(), "Order confirmed"));
+        }
 
         deliveryTrackingRepository.findByOrderIdOrderByUpdatedAtAsc(id).stream()
             .map(tracking -> new OrderTimelineEntryResponse(
@@ -171,21 +192,21 @@ public class OrderService {
 
         orderDeferralRepository.findByOrderIdOrderByCreatedAtAsc(id).stream()
             .map(deferral -> new OrderTimelineEntryResponse(
-                "deferred",
+                "DEFERRED",
                 "DEFERRED",
                 deferral.getCreatedAt(),
                 deferral.getReason()))
             .forEach(entries::add);
 
         if (order.getStatus() == OrderStatus.DELIVERED
-            && entries.stream().noneMatch(entry -> "delivered".equals(entry.event()))) {
+            && entries.stream().noneMatch(entry -> "DELIVERED".equals(entry.event()))) {
             entries.add(new OrderTimelineEntryResponse(
-                "delivered", "DELIVERED", order.getUpdatedAt(), "Delivery completed"));
+                "DELIVERED", "DELIVERED", order.getUpdatedAt(), "Delivery completed"));
         }
         if (order.getStatus() == OrderStatus.DEFERRED
-            && entries.stream().noneMatch(entry -> "deferred".equals(entry.event()))) {
+            && entries.stream().noneMatch(entry -> "DEFERRED".equals(entry.event()))) {
             entries.add(new OrderTimelineEntryResponse(
-                "deferred", "DEFERRED", order.getUpdatedAt(), "Order deferred"));
+                "DEFERRED", "DEFERRED", order.getUpdatedAt(), "Order deferred"));
         }
         entries.sort(Comparator.comparing(OrderTimelineEntryResponse::occurred_at));
         return entries;
@@ -207,6 +228,17 @@ public class OrderService {
             .orElseThrow(() -> new OrderNotFoundException("tracking not found for order: " + id));
     }
 
+    @Transactional(readOnly = true)
+    public EtaResponse getEta(UUID id) {
+        accessibleOrder(id);
+        var tracking = deliveryTrackingRepository.findFirstByOrderIdOrderByUpdatedAtDesc(id)
+            .orElseThrow(() -> new OrderNotFoundException("ETA not available for order: " + id));
+        if (tracking.getEta() == null) {
+            throw new OrderNotFoundException("ETA not available for order: " + id);
+        }
+        return new EtaResponse(id, tracking.getEta(), tracking.isDelayed());
+    }
+
     @Transactional
     public ReceiptResponse createReceipt(UUID id, CreateReceiptRequest request) {
         OrderEntity order = accessibleOrder(id);
@@ -222,6 +254,25 @@ public class OrderService {
         receipt.setConfirmedBy(request.confirmed_by());
         receipt.setDiscrepancy(request.has_discrepancy());
         var saved = receiptConfirmationRepository.saveAndFlush(receipt);
+        var requestedLines = request.items() == null ? List.<CreateReceiptRequest.ReceiptLine>of() : request.items();
+        var orderItems = order.getItems().stream().collect(java.util.stream.Collectors.toMap(
+            OrderItemEntity::getId, item -> item));
+        for (var line : requestedLines) {
+            var item = orderItems.get(line.order_item_id());
+            if (item == null) {
+                throw new OrderValidationException("receipt item does not belong to order: " + line.order_item_id());
+            }
+            if (line.received_qty() > item.getQuantity()) {
+                throw new OrderValidationException("received_qty exceeds ordered quantity for item: " + line.order_item_id());
+            }
+            var receiptLine = new ReceiptLineEntity();
+            receiptLine.setReceiptId(saved.getId());
+            receiptLine.setOrderItemId(item.getId());
+            receiptLine.setExpectedQty(item.getQuantity());
+            receiptLine.setReceivedQty(line.received_qty());
+            receiptLineRepository.save(receiptLine);
+        }
+        eventPublisher.publishReceiptConfirmed(id, saved.getId());
         return new ReceiptResponse(
             saved.getId(), saved.getOrderId(), saved.getConfirmedBy(),
             saved.getConfirmedAt(), saved.hasDiscrepancy());
@@ -235,7 +286,9 @@ public class OrderService {
         issue.setIssueType(parseIssueType(request.issue_type()));
         issue.setDescription(request.description());
         issue.setPhotoUrl(request.photo_url());
-        return IssueResponse.from(issueReportRepository.saveAndFlush(issue));
+        var saved = issueReportRepository.saveAndFlush(issue);
+        eventPublisher.publishFlagRaised(id, saved.getId(), saved.getIssueType().name());
+        return IssueResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -262,7 +315,11 @@ public class OrderService {
     }
 
     private OrderEntity accessibleOrder(UUID id) {
-        String outletId = authenticatedOutletId();
+        if (canReadAllOrders()) {
+            return orderRepository.findById(id)
+                .orElseThrow(() -> new OrderNotFoundException("order not found: " + id));
+        }
+        String outletId = canReadAllOrders() ? null : authenticatedOutletId();
         return orderRepository.findById(id)
             .filter(order -> outletId.equals(order.getOutletId()))
             .orElseThrow(() -> new OrderNotFoundException("order not found: " + id));
@@ -276,26 +333,28 @@ public class OrderService {
             return OrderStatus.valueOf(value.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {
             throw new OrderValidationException(
-                "status must be one of: PENDING, ALLOCATED, DEFERRED, ATTEMPTED, DELIVERED");
+                "status must be one of: PENDING, CONFIRMED, ALLOCATED, DEFERRED, ATTEMPTED, DELIVERED");
         }
     }
 
     private static IssueReportType parseIssueType(String value) {
         try {
-            return IssueReportType.valueOf(value.trim().toLowerCase());
+            String normalized = value.trim().toLowerCase();
+            if (normalized.equals("short")) normalized = "short_item";
+            if (normalized.equals("wrong")) normalized = "wrong_item";
+            return IssueReportType.valueOf(normalized);
         } catch (RuntimeException exception) {
             throw new OrderValidationException(
-                "issue_type must be one of: missing, damaged, wrong_item, late");
+                "issue_type must be one of: damaged, short, wrong");
         }
     }
 
     private static String trackingEvent(DeliveryTrackingStatus status) {
         return switch (status) {
-            case allocated -> "allocated";
-            case loaded -> "loaded";
-            case out_for_delivery -> "out_for_delivery";
-            case delivery_attempted -> "delivery_attempted";
-            case completed -> "delivered";
+            case allocated -> "PLANNED";
+            case loaded -> "LOADED";
+            case out_for_delivery, delivery_attempted -> "OUT_FOR_DELIVERY";
+            case completed -> "DELIVERED";
         };
     }
 
@@ -305,6 +364,13 @@ public class OrderService {
             throw new OrderValidationException("authenticated gateway identity is required");
         }
         return user;
+    }
+
+    private static boolean canReadAllOrders() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+            .map(Object::toString)
+            .anyMatch(authority -> authority.equals("ROLE_DISPATCHER") || authority.equals("ROLE_ADMIN"));
     }
 
     private static UUID parseUserId(String value) {

@@ -39,6 +39,11 @@ public class RabbitMqConfig {
     }
 
     @Bean
+    Queue loadingCompletedQueue(@Value("${waypoint.rabbitmq.queues.loading-completed}") String queue) {
+        return new Queue(queue, true);
+    }
+
+    @Bean
     Binding allocationCompletedBinding(
         @Qualifier("allocationCompletedQueue") Queue allocationCompletedQueue,
         TopicExchange waypointEventsExchange,
@@ -66,6 +71,14 @@ public class RabbitMqConfig {
         return BindingBuilder.bind(deliveryCompletedQueue)
             .to(waypointEventsExchange)
             .with(routingKey);
+    }
+
+    @Bean
+    Binding loadingCompletedBinding(
+        @Qualifier("loadingCompletedQueue") Queue queue,
+        TopicExchange exchange,
+        @Value("${waypoint.rabbitmq.routing-keys.loading-completed}") String routingKey) {
+        return BindingBuilder.bind(queue).to(exchange).with(routingKey);
     }
 
     @Bean

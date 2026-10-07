@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { installDriverAutoSync } from '../driverDeliveryApi';
 import { DriverView, BottomTab } from '../types';
 import { DriverHomeView } from './DriverHomeView';
 import { StopDetailsView } from './StopDetailsView';
@@ -22,6 +23,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
   const [activeTab, setActiveTab] = useState<BottomTab>('today');
   const [deviceFrameMode, setDeviceFrameMode] = useState<boolean>(true);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
+
+  useEffect(() => installDriverAutoSync(), []);
 
   const showToast = (message: string) => {
     setNotificationToast(message);
@@ -274,6 +277,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
         {/* Render Current Screen */}
         {currentView === 'home' && (
           <DriverHomeView
+            currentUser={currentUser}
             onSelectStop={(stopId) => {
               setCurrentView('stop-details');
               setActiveTab('today');

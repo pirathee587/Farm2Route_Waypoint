@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,48 @@ import (
 	"github.com/waypoint/loading-delivery-service/internal/model"
 	"github.com/waypoint/loading-delivery-service/internal/service"
 )
+
+func (h *DriverHandler) CompleteStop(w http.ResponseWriter, r *http.Request) {
+	stopID, err := uuid.Parse(r.PathValue("stopId")); if err != nil { model.ErrBadRequest("invalid stopId format").WriteJSON(w); return }
+	user, _ := middleware.GetUserFromContext(r.Context())
+	r.Body = http.MaxBytesReader(w, r.Body, 11*1024*1024)
+	if err = r.ParseMultipartForm(11*1024*1024); err != nil { model.ErrBadRequest("invalid multipart form or upload exceeds 5MB per file").WriteJSON(w); return }
+	outcome := strings.ToUpper(strings.TrimSpace(r.FormValue("outcome")))
+	if outcome != "DELIVERED" && outcome != "PARTIAL" && outcome != "REFUSED" && outcome != "NOT_HOME" { model.NewAppError(model.ErrCodeValidationFailed,"outcome must be DELIVERED, PARTIAL, REFUSED or NOT_HOME",422).WriteJSON(w); return }
+	op := r.Header.Get("Idempotency-Key"); if op=="" { op=r.FormValue("operation_id") }; if op=="" { op=uuid.NewString() }
+	completed := time.Now(); if raw:=r.FormValue("clientTime"); raw!="" { if parsed,e:=time.Parse(time.RFC3339,raw); e==nil { completed=parsed } }
+	if outcome=="REFUSED" || outcome=="NOT_HOME" {
+		reason := "other"; if outcome=="NOT_HOME" { reason="outlet_closed" }
+		response,e:=h.service.CantDeliver(r.Context(),user.UserID,stopID,model.CantDeliverRequest{ClientActionID:op,Reason:reason,Note:r.FormValue("note"),ReportedAt:&completed})
+		writeDriverResponse(w,response,e); return
+	}
+	var items []model.ConfirmItem
+	if err=json.Unmarshal([]byte(r.FormValue("items")),&items); err!=nil { model.ErrBadRequest("items must be valid JSON").WriteJSON(w); return }
+	shortfalls:=[]model.ConfirmShortfall{}
+	if raw:=r.FormValue("shortfalls"); raw!="" { if err=json.Unmarshal([]byte(raw),&shortfalls); err!=nil { model.ErrBadRequest("shortfalls must be valid JSON").WriteJSON(w); return } }
+	upload := func(field, kind string) (string,error) {
+		file,head,e:=r.FormFile(field); if e==http.ErrMissingFile{return "",nil}; if e!=nil{return "",e}; defer file.Close()
+		data,e:=io.ReadAll(io.LimitReader(file,5*1024*1024+1)); if e!=nil{return "",e}; contentType,e:=service.ValidatePODImage(data); if e!=nil{return "",e}
+		url,e:=h.storage.UploadPOD(r.Context(),stopID.String(),kind,head.Filename,data,contentType); if e!=nil{return "",e}
+		_,e=h.service.SavePODUpload(r.Context(),user.UserID,stopID,kind,url,r.FormValue("receivedBy")); return url,e
+	}
+	signature,e:=upload("signature","SIGNATURE"); if e!=nil{writeDriverResponse(w,nil,e);return}; photo,e:=upload("photo","PHOTO"); if e!=nil{writeDriverResponse(w,nil,e);return}
+	request:=model.ConfirmDeliveryRequest{ClientActionID:op,Items:items,Shortfalls:shortfalls,ReceiverName:r.FormValue("receivedBy"),SignatureURL:signature,PhotoURL:photo,Note:r.FormValue("note"),CompletedAt:&completed,Outcome:outcome}
+	response,e:=h.service.ConfirmDeliveryFlexible(r.Context(),user.UserID,stopID,request); writeDriverResponse(w,response,e)
+}
+
+func (h *DriverHandler) IssueStop(w http.ResponseWriter, r *http.Request) {
+	stopID, err := uuid.Parse(r.PathValue("stopId")); if err != nil { model.ErrBadRequest("invalid stopId format").WriteJSON(w); return }
+	var body struct { Type string `json:"type"`; Description string `json:"description"`; Note string `json:"note"`; CapturedAt *time.Time `json:"captured_at"`; OperationID string `json:"operation_id"` }
+	if err=json.NewDecoder(r.Body).Decode(&body); err!=nil { model.ErrBadRequest("invalid request body").WriteJSON(w); return }
+	allowed:=map[string]bool{"DAMAGE":true,"ACCESS":true,"TEMPERATURE":true,"VEHICLE":true,"OTHER":true}; body.Type=strings.ToUpper(body.Type)
+	if !allowed[body.Type] { model.NewAppError(model.ErrCodeValidationFailed,"invalid issue type",422).WriteJSON(w); return }
+	op:=r.Header.Get("Idempotency-Key"); if op==""{op=body.OperationID}; if op==""{op=uuid.NewString()}; at:=time.Now(); if body.CapturedAt!=nil{at=*body.CapturedAt}
+	reason:=map[string]string{"ACCESS":"access_denied","TEMPERATURE":"wrong_vehicle_temperature"}[body.Type]; if reason==""{reason="other"}
+	note:=strings.TrimSpace(body.Description+" "+body.Note); user,_:=middleware.GetUserFromContext(r.Context())
+	response,e:=h.service.CantDeliver(r.Context(),user.UserID,stopID,model.CantDeliverRequest{ClientActionID:op,Reason:reason,Note:note,ReportedAt:&at})
+	writeDriverResponse(w,response,e)
+}
 
 type DriverHandler struct {
 	service      *service.DriverService
@@ -159,6 +202,13 @@ func (h *DriverHandler) GetToday(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.service.Today(r.Context(), user.UserID, date)
 	writeDriverResponse(w, resp, err)
 }
+func (h *DriverHandler) StartTrip(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("tripId")); if err != nil { model.ErrBadRequest("invalid tripId format").WriteJSON(w); return }
+	op := r.Header.Get("Idempotency-Key"); if op == "" { op = uuid.NewString() }
+	user, _ := middleware.GetUserFromContext(r.Context())
+	response, err := h.service.StartTrip(r.Context(), user.UserID, id, op)
+	writeDriverResponse(w, response, err)
+}
 func (h *DriverHandler) GetTripStops(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("tripId"))
 	if err != nil {
@@ -198,6 +248,8 @@ func (h *DriverHandler) Arrive(w http.ResponseWriter, r *http.Request) {
 		model.ErrBadRequest("invalid request body").WriteJSON(w)
 		return
 	}
+	if request.ClientActionID == "" { request.ClientActionID = r.Header.Get("Idempotency-Key") }
+	if request.ClientActionID == "" { request.ClientActionID = uuid.NewString() }
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		model.ErrBadRequest("request body must contain one JSON object").WriteJSON(w)

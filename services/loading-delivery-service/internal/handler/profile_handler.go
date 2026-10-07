@@ -26,18 +26,6 @@ func (h *ProfileHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	func (h *ProfileHandler) Location(w http.ResponseWriter, r *http.Request) {
-		var request model.LocationUpdateRequest
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&request); err != nil {
-			model.ErrBadRequest("invalid request body").WriteJSON(w)
-			return
-		}
-		user, _ := middleware.GetUserFromContext(r.Context())
-		response, err := h.service.Location(r.Context(), user.UserID, request)
-		writeDriverResponse(w, response, err)
-	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		model.ErrBadRequest("request body must contain one JSON object").WriteJSON(w)
@@ -47,6 +35,20 @@ func (h *ProfileHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	response, err := h.service.Heartbeat(r.Context(), user.UserID, request)
 	writeDriverResponse(w, response, err)
 }
+
+func (h *ProfileHandler) Location(w http.ResponseWriter, r *http.Request) {
+	var request model.LocationUpdateRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		model.ErrBadRequest("invalid request body").WriteJSON(w)
+		return
+	}
+	user, _ := middleware.GetUserFromContext(r.Context())
+	response, err := h.service.Location(r.Context(), user.UserID, request)
+	writeDriverResponse(w, response, err)
+}
+
 func (h *ProfileHandler) History(w http.ResponseWriter, r *http.Request) {
 	user, _ := middleware.GetUserFromContext(r.Context())
 	q := r.URL.Query()

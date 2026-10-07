@@ -15,7 +15,9 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        // All browser API traffic must pass through the API Gateway. Port 8081
+        // is the Auth Service and returns 404 for planning/order routes.
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
     },

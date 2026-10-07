@@ -34,6 +34,8 @@ type DriverTrip struct {
 	CompletedStops  int          `json:"completed_stops"`
 	ProgressPercent int          `json:"progress_percent"`
 	Stops           []DriverStop `json:"stops"`
+	ReadyAt         *time.Time   `json:"ready_at,omitempty"`
+	Startable       bool         `json:"startable"`
 }
 
 type DriverTodayResponse struct {
@@ -46,7 +48,10 @@ type DriverTripRecord struct {
 	ID         string
 	TripNumber int
 	Status     string
+	ReadyAt    *time.Time
 }
+
+type TripStartResponse struct { TripID string `json:"trip_id"`; Status string `json:"status"`; StartedAt time.Time `json:"started_at"` }
 
 type DriverStopRecord struct {
 	StopID         string
@@ -131,6 +136,9 @@ type DriverStopDetailRecord struct {
 type ArriveRequest struct {
 	ClientActionID string     `json:"client_action_id"`
 	ArrivedAt      *time.Time `json:"arrived_at,omitempty"`
+	Lat            *float64   `json:"lat,omitempty"`
+	Lng            *float64   `json:"lng,omitempty"`
+	ClientTime     *time.Time `json:"clientTime,omitempty"`
 }
 
 type ArrivalRecord struct {
@@ -214,6 +222,7 @@ type ConfirmDeliveryRequest struct {
 	PhotoURL       string             `json:"photo_url"`
 	Note           string             `json:"note"`
 	CompletedAt    *time.Time         `json:"completed_at"`
+	Outcome        string             `json:"outcome,omitempty"`
 }
 type ConfirmDeliveryResponse struct {
 	Outcome     string    `json:"outcome"`
