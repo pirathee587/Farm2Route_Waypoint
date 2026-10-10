@@ -4,22 +4,24 @@ Farm2Route Waypoint is a database-backed delivery operations platform for Store 
 
 See [docs/architecture.md](docs/architecture.md) for the system map and [DOCKER_SETUP.md](DOCKER_SETUP.md) for detailed Docker and troubleshooting instructions.
 
-## Languages and technology stack
+## Languages used in this repository
 
-| Language / format | Where it is used | Main technology |
-|---|---|---|
-| TypeScript / TSX | Browser frontend and UI components | React 18, Vite 5, React Router, Mapbox GL |
-| CSS | Responsive Store Manager, Dispatcher, Loader, and Driver interfaces | Native CSS |
-| C# | Authentication and API routing | .NET 8, ASP.NET Core, Entity Framework Core, YARP |
-| Java | Order management, planning, allocation, and validation | Java 21, Spring Boot 3.2, Spring Data JPA, Maven |
-| Go | Loading, delivery, Driver APIs, notifications, and background workers | Go 1.22, pgx, gRPC, RabbitMQ |
-| SQL / PL/pgSQL | Database schema, migrations, seed data, constraints, and database functions | PostgreSQL 16 / Supabase-compatible schema |
-| Protocol Buffers | Typed service-to-service contracts | gRPC / Protobuf 3 |
-| Python | Data-science and allocation research utilities under `ml-datathon` | Python notebooks and modules |
-| YAML | Docker Compose, application configuration, and service settings | Docker Compose and service config |
-| PowerShell / shell scripts | Local setup, verification, and container automation | PowerShell and POSIX shell |
+This list is based only on source files that exist in this repository.
 
-The application is a polyglot microservice system: the frontend is TypeScript, core business services use C#, Java, and Go, and all roles share PostgreSQL as the source of truth.
+| Language | Location and use |
+|---|---|
+| TypeScript / TSX | `frontend/src` — React pages, components, API clients, and application logic |
+| CSS | `frontend/src` — page layouts and responsive styling |
+| HTML | `frontend/index.html` — frontend entry document |
+| C# | `services/auth-service` and `services/api-gateway` — authentication and API gateway |
+| Java | `services/order-service` and `services/planning-service` — orders, planning, allocation, and validation |
+| Go | `services/loading-delivery-service` and `services/notification-service` — loading, delivery, Driver APIs, and notifications |
+| SQL / PL/pgSQL | `supabase`, Order migrations, and Planning migrations — schema, seed data, constraints, functions, and data migrations |
+| Protocol Buffers | `proto` — service-to-service message and gRPC contracts |
+| Python | `scripts/e2e_test.py`, `scripts/check_user.py`, and `scripts/verify_reproducibility.py` — project verification scripts |
+| POSIX shell | `infra/postgres/01-apply-migrations.sh` — PostgreSQL migration startup script |
+
+YAML, JSON, XML, `.env`, NGINX configuration, Dockerfiles, and Docker Compose files are also present as project configuration formats.
 
 ## Run locally with Docker
 
