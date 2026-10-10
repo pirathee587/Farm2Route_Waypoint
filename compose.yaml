@@ -1,12 +1,12 @@
 name: farm2route
 
 x-app-env: &app-env
-  SUPABASE_DB_HOST: postgres
-  SUPABASE_DB_PORT: "5432"
-  SUPABASE_DB_NAME: ${POSTGRES_DB:-waypoint}
-  SUPABASE_DB_USER: ${POSTGRES_USER:-waypoint}
-  SUPABASE_DB_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local}
-  DATABASE_URL: postgresql://${POSTGRES_USER:-waypoint}:${POSTGRES_PASSWORD:-waypoint_local}@postgres:5432/${POSTGRES_DB:-waypoint}?sslmode=disable
+  # PostgreSQL is hosted by Supabase. Values must be supplied in the root .env.
+  SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:?Set SUPABASE_DB_HOST in .env}
+  SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+  SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+  SUPABASE_DB_USER: ${SUPABASE_DB_USER:?Set SUPABASE_DB_USER in .env}
+  SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:?Set SUPABASE_DB_PASSWORD in .env}
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
   RABBITMQ_USER: ${RABBITMQ_USER:-waypoint}
@@ -21,25 +21,6 @@ x-app-env: &app-env
   SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-waypoint}
-      POSTGRES_USER: ${POSTGRES_USER:-waypoint}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./supabase/test_bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
-      - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations:ro
-      - ./infra/postgres/01-apply-migrations.sh:/docker-entrypoint-initdb.d/01-apply-migrations.sh:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    networks: [farm2route]
-
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     restart: unless-stopped
@@ -67,9 +48,7 @@ services:
       <<: *app-env
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Production
-      DB_SSL_MODE: Disable
-    depends_on:
-      postgres: { condition: service_healthy }
+      DB_SSL_MODE: Require
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 10s
@@ -86,12 +65,11 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}?sslmode=disable
-      DB_USERNAME: ${POSTGRES_USER:-waypoint}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local}
+      DB_URL: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-postgres}?sslmode=require
+      DB_USERNAME: ${SUPABASE_DB_USER}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       ORDER_SERVICE_GRPC_HOST: order-service
     depends_on:
-      postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
@@ -109,11 +87,10 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}?sslmode=disable
+      DB_URL: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-postgres}?sslmode=require
       PLANNING_SERVICE_GRPC_HOST: planning-service
       SEED_DATA_PATH: /app/data
     depends_on:
-      postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
@@ -137,7 +114,6 @@ services:
     volumes:
       - loading_uploads:/uploads
     depends_on:
-      postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
       planning-service: { condition: service_healthy }
     healthcheck:
@@ -155,7 +131,6 @@ services:
     environment:
       <<: *app-env
     depends_on:
-      postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "/server", "-healthcheck"]
@@ -210,7 +185,6 @@ services:
     networks: [farm2route]
 
 volumes:
-  postgres_data:
   rabbitmq_data:
   loading_uploads:
 

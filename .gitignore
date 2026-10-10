@@ -6,6 +6,9 @@
 !.env.example
 !**/.env.example
 
+# Local database backups may contain production or personal data.
+/backups/
+
 # ── SSL Certs ─────────────────────────────────────────────────────────────────
 nginx/certs/*.key
 nginx/certs/*.crt

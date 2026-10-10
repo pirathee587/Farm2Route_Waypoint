@@ -63,7 +63,20 @@ func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, veh
 		  AND (delivery_date=$2::date OR
 		       (delivery_date >= $2::date AND status::text IN ('CONFIRMED','READY_FOR_LOADING','PLANNED','LOADING','IN_PROGRESS')))
 		  AND trip_number IS NOT NULL
-		ORDER BY COALESCE(confirmed_at,created_at) DESC`, driverID, date.Format("2006-01-02"), vehicleID)
+		ORDER BY
+		  CASE status::text
+		    WHEN 'IN_PROGRESS' THEN 0
+		    WHEN 'LOADING' THEN 1
+		    WHEN 'READY_FOR_LOADING' THEN 2
+		    WHEN 'CONFIRMED' THEN 3
+		    WHEN 'PLANNED' THEN 4
+		    WHEN 'COMPLETED' THEN 5
+		    WHEN 'CANCELLED' THEN 6
+		    ELSE 7
+		  END,
+		  delivery_date ASC,
+		  trip_number ASC,
+		  COALESCE(confirmed_at,created_at) ASC`, driverID, date.Format("2006-01-02"), vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("get driver trips: %w", err)
 	}

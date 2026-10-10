@@ -28,9 +28,13 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
       ]);
       setRunSheet(runs);
       setDispatcher(contact);
-      setSelectedTripId(current => runs.trips.some(t => t.trip_id === current)
-        ? current
-        : runs.trips[0]?.trip_id || '');
+      setSelectedTripId(current => {
+        const currentTrip = runs.trips.find(trip => trip.trip_id === current);
+        if (currentTrip && !isFinishedTrip(currentTrip.status)) return current;
+        return runs.trips.find(trip => !isFinishedTrip(trip.status))?.trip_id
+          ?? runs.trips[0]?.trip_id
+          ?? '';
+      });
       setLoadError(null);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Unable to load the assigned run.');
@@ -99,6 +103,8 @@ export const DriverHomeView: React.FC<DriverHomeViewProps> = ({
     </main>
   </div>;
 };
+
+const isFinishedTrip = (status: string) => status === 'COMPLETED' || status === 'CANCELLED';
 
 const card: React.CSSProperties = {background:'#fff',borderRadius:18,padding:16,boxShadow:'0 2px 10px rgba(15,23,42,.04)'};
 const emptyCard: React.CSSProperties = {...card,color:'#64748b',textAlign:'center'};
