@@ -11,12 +11,11 @@ This list is based only on source files that exist in this repository.
 | Language | Location and use |
 |---|---|
 | TypeScript / TSX | `frontend/src` — React pages, components, API clients, and application logic |
-| CSS | `frontend/src` — page layouts and responsive styling |
 | HTML | `frontend/index.html` — frontend entry document |
 | C# | `services/auth-service` and `services/api-gateway` — authentication and API gateway |
 | Java | `services/order-service` and `services/planning-service` — orders, planning, allocation, and validation |
 | Go | `services/loading-delivery-service` and `services/notification-service` — loading, delivery, Driver APIs, and notifications |
-| SQL / PL/pgSQL | `supabase`, Order migrations, and Planning migrations — schema, seed data, constraints, functions, and data migrations |
+| PostgreSQL SQL / PL/pgSQL | `supabase`, Order migrations, and Planning migrations — PostgreSQL schema, seed data, constraints, functions, triggers, and migrations |
 | Protocol Buffers | `proto` — service-to-service message and gRPC contracts |
 | POSIX shell | `infra/postgres/01-apply-migrations.sh` — PostgreSQL migration startup script |
 
