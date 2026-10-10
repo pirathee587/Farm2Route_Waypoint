@@ -18,7 +18,6 @@ This list is based only on source files that exist in this repository.
 | Go | `services/loading-delivery-service` and `services/notification-service` — loading, delivery, Driver APIs, and notifications |
 | SQL / PL/pgSQL | `supabase`, Order migrations, and Planning migrations — schema, seed data, constraints, functions, and data migrations |
 | Protocol Buffers | `proto` — service-to-service message and gRPC contracts |
-| Python | `scripts/e2e_test.py`, `scripts/check_user.py`, and `scripts/verify_reproducibility.py` — project verification scripts |
 | POSIX shell | `infra/postgres/01-apply-migrations.sh` — PostgreSQL migration startup script |
 
 YAML, JSON, XML, `.env`, NGINX configuration, Dockerfiles, and Docker Compose files are also present as project configuration formats.
