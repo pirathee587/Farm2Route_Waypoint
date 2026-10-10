@@ -184,6 +184,7 @@ func main() {
 	// 2. Loader Routes (/api/loading/**)
 	loaderMux := http.NewServeMux()
 	loaderMux.HandleFunc("GET /api/loading/trips/filter-options", loaderHandler.GetFilterOptions)
+	loaderMux.HandleFunc("GET /api/loading/cant-deliver", loaderHandler.GetCantDeliverReviews)
 	loaderMux.HandleFunc("GET /api/loading/trips/{tripId}/stops/{stopId}/items", loaderHandler.GetStopItems)
 	loaderMux.HandleFunc("POST /api/loading/trips/{tripId}/stops/{stopId}/confirm", loaderHandler.ConfirmStop)
 	loaderMux.HandleFunc("POST /api/loading/trips/{tripId}/stops/{stopId}/start", loaderHandler.StartStopLoading)

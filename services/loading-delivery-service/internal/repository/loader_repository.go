@@ -458,6 +458,7 @@ func (r *LoaderRepository) MarkOutboxEventPublished(ctx context.Context, eventID
 
 type RawTripRecord struct {
 	TripID        uuid.UUID
+	TripCode      string
 	VehicleID     string
 	LoadedKg      float64
 	CapacityKg    float64
@@ -484,11 +485,17 @@ func (r *LoaderRepository) FetchRawTripsForDateAndDepot(ctx context.Context, dat
 	query := `
 		SELECT
 			t.trip_id,
+			t.trip_code,
 			COALESCE(t.vehicle_id, '') AS vehicle_id,
 			COALESCE((
-				SELECT SUM(i.weight_kg)
+				SELECT SUM(CASE
+					WHEN i.status = 'CHECKED' THEN i.weight_kg
+					WHEN i.status = 'ISSUE' AND i.expected_qty > 0
+						THEN i.weight_kg * i.loaded_qty::NUMERIC / i.expected_qty
+					ELSE 0
+				END)
 				FROM public.load_items i
-				WHERE i.trip_id = t.trip_id AND i.status = 'CHECKED' AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
+				WHERE i.trip_id = t.trip_id AND i.status IN ('CHECKED', 'ISSUE') AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
 			), 0)::FLOAT8 AS loaded_kg,
 			COALESCE(v.weight_cap_kg, 5000)::FLOAT8 AS capacity_kg,
 			COALESCE((
@@ -499,9 +506,9 @@ func (r *LoaderRepository) FetchRawTripsForDateAndDepot(ctx context.Context, dat
 			COALESCE((
 				SELECT COUNT(*)
 				FROM public.load_items i
-				WHERE i.trip_id = t.trip_id AND i.status = 'CHECKED' AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
+				WHERE i.trip_id = t.trip_id AND i.status IN ('CHECKED', 'ISSUE') AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
 			), 0)::INT AS checked_items,
-			COALESCE(u.full_name, 'Unassigned') AS driver_name,
+			COALESCE(dp."FullName", u.full_name, 'Unassigned') AS driver_name,
 			COALESCE(lc.dock, 'Dock A5') AS dock,
 			COALESCE(lc.status::TEXT, 'PENDING') AS conf_status,
 			(lc.ready_at IS NOT NULL) AS has_ready_at,
@@ -523,9 +530,12 @@ func (r *LoaderRepository) FetchRawTripsForDateAndDepot(ctx context.Context, dat
 		FROM public.trips t
 		LEFT JOIN public.vehicles v ON t.vehicle_id = v.vehicle_id
 		LEFT JOIN public.user_profiles u ON t.driver_id = u.id
+		LEFT JOIN auth_schema.driver_profiles dp ON dp."UserId" = t.driver_id
 		LEFT JOIN public.loading_confirmations lc ON t.trip_id = lc.trip_id
-		WHERE ($1 = '' OR t.delivery_date = $1::DATE OR t.delivery_date = CURRENT_DATE
-		       OR lc.status::TEXT IN ('PENDING','LOADING'))
+		WHERE NULLIF(BTRIM(t.trip_code),'') IS NOT NULL
+		  AND lc.trip_id IS NOT NULL
+		  AND ($1 = '' OR t.delivery_date = $1::DATE
+		       OR (t.confirmed_at AT TIME ZONE 'Asia/Colombo')::DATE = $1::DATE)
 		  AND ($2 = '' OR LOWER(COALESCE(v.depot,'')) = LOWER($2)
 		       OR ($2 = 'Peliyagoda' AND LOWER(COALESCE(v.depot,'')) IN ('depot-01','peliyagoda'))
 		       OR ($2 = 'Kandy' AND LOWER(COALESCE(v.depot,'')) LIKE '%kandy%'))
@@ -541,7 +551,7 @@ func (r *LoaderRepository) FetchRawTripsForDateAndDepot(ctx context.Context, dat
 	for rows.Next() {
 		var rec RawTripRecord
 		err := rows.Scan(
-			&rec.TripID, &rec.VehicleID, &rec.LoadedKg, &rec.CapacityKg,
+			&rec.TripID, &rec.TripCode, &rec.VehicleID, &rec.LoadedKg, &rec.CapacityKg,
 			&rec.TotalItems, &rec.CheckedItems,
 			&rec.DriverName, &rec.Dock, &rec.ConfStatus, &rec.HasReadyAt, &rec.StopCount,
 			&rec.Destination, &rec.HasOpenIssues, &rec.CreatedAt, &rec.Depot, &rec.Origin,
@@ -561,6 +571,34 @@ func (r *LoaderRepository) GetUserDepot(ctx context.Context, userID uuid.UUID) (
 		return "", nil
 	}
 	return depot, err
+}
+
+func (r *LoaderRepository) ListCantDeliverReviews(ctx context.Context, date string) ([]model.CantDeliverReview, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT d.deferral_id::text,d.trip_id::text,t.trip_code,d.stop_id::text,d.order_id::text,
+		       COALESCE(d.outlet_id,s.outlet_id),s.outlet_name,d.reason,COALESCE(d.note,''),COALESCE(d.driver_id,t.driver_id)::text,
+		       COALESCE(dp."FullName",up.full_name,tp."FullName",tup.full_name,'Driver'),d.vehicle_id,
+		       COALESCE(d.reported_at,d.created_at),d.status
+		FROM public.deferral_records d
+		JOIN public.trips t ON t.trip_id=d.trip_id
+		JOIN public.load_stops s ON s.stop_id=d.stop_id
+		LEFT JOIN auth_schema.driver_profiles dp ON dp."UserId"=d.driver_id
+		LEFT JOIN public.user_profiles up ON up.id=d.driver_id
+		LEFT JOIN auth_schema.driver_profiles tp ON tp."UserId"=t.driver_id
+		LEFT JOIN public.user_profiles tup ON tup.id=t.driver_id
+		WHERE d.trip_id IS NOT NULL AND d.stop_id IS NOT NULL AND t.driver_id IS NOT NULL AND d.vehicle_id IS NOT NULL
+		  AND ($1='' OR d.delivery_date=NULLIF($1,'')::date OR (COALESCE(d.reported_at,d.created_at) AT TIME ZONE 'Asia/Colombo')::date=NULLIF($1,'')::date)
+		ORDER BY COALESCE(d.reported_at,d.created_at) DESC
+	`, date)
+	if err != nil { return nil, fmt.Errorf("list cant-deliver reviews: %w", err) }
+	defer rows.Close()
+	result := []model.CantDeliverReview{}
+	for rows.Next() {
+		var x model.CantDeliverReview
+		if err := rows.Scan(&x.DeferralID,&x.TripID,&x.TripCode,&x.StopID,&x.OrderID,&x.OutletID,&x.OutletName,&x.Reason,&x.Note,&x.DriverID,&x.DriverName,&x.VehicleID,&x.ReportedAt,&x.Status); err != nil { return nil, err }
+		result = append(result,x)
+	}
+	return result, rows.Err()
 }
 
 // RawTripDetail holds DB fields for GET /api/loading/trips/{tripId}
@@ -593,13 +631,18 @@ func (r *LoaderRepository) GetTripByTripCodeOrID(ctx context.Context, idOrCode s
 	query := `
 		SELECT
 			t.trip_id,
-			COALESCE('WPT-' || substring(t.vehicle_id from 5), 'WPT-204') AS trip_code,
+			t.trip_code,
 			t.vehicle_id,
 			COALESCE(v.weight_cap_kg, 5000)::FLOAT8 AS capacity_kg,
 			COALESCE((
-				SELECT SUM(i.weight_kg)
+				SELECT SUM(CASE
+					WHEN i.status = 'CHECKED' THEN i.weight_kg
+					WHEN i.status = 'ISSUE' AND i.expected_qty > 0
+						THEN i.weight_kg * i.loaded_qty::NUMERIC / i.expected_qty
+					ELSE 0
+				END)
 				FROM public.load_items i
-				WHERE i.trip_id = t.trip_id AND i.status = 'CHECKED' AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
+				WHERE i.trip_id = t.trip_id AND i.status IN ('CHECKED', 'ISSUE') AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
 			), 0)::FLOAT8 AS loaded_kg,
 			COALESCE((
 				SELECT COUNT(*)
@@ -609,9 +652,9 @@ func (r *LoaderRepository) GetTripByTripCodeOrID(ctx context.Context, idOrCode s
 			COALESCE((
 				SELECT COUNT(*)
 				FROM public.load_items i
-				WHERE i.trip_id = t.trip_id AND i.status = 'CHECKED' AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
+				WHERE i.trip_id = t.trip_id AND i.status IN ('CHECKED', 'ISSUE') AND EXISTS (SELECT 1 FROM public.load_stops active WHERE active.stop_id=i.stop_id AND active.removed_from_plan=FALSE)
 			), 0)::INT AS checked_items,
-			COALESCE(u.full_name, 'Unassigned') AS driver_name,
+			COALESCE(dp."FullName", u.full_name, 'Unassigned') AS driver_name,
 			COALESCE(lc.dock, 'Dock A5') AS dock,
 			'07:30' AS planned_start,
 			'Shift A' AS shift,
@@ -640,6 +683,7 @@ func (r *LoaderRepository) GetTripByTripCodeOrID(ctx context.Context, idOrCode s
 		FROM public.trips t
 		LEFT JOIN public.vehicles v ON t.vehicle_id = v.vehicle_id
 		LEFT JOIN public.user_profiles u ON t.driver_id = u.id
+		LEFT JOIN auth_schema.driver_profiles dp ON dp."UserId" = t.driver_id
 		LEFT JOIN public.loading_confirmations lc ON t.trip_id = lc.trip_id
 		WHERE (
 			t.trip_id::TEXT = $1
@@ -1481,7 +1525,12 @@ func (r *LoaderRepository) CreateShortfall(ctx context.Context, p ShortfallParam
 	// Resolve reporter display name (user_profiles.full_name -> header fallback -> user id)
 	reportedBy := p.ReporterName
 	var profileName *string
-	_ = tx.QueryRow(ctx, `SELECT full_name FROM public.user_profiles WHERE id = $1`, p.LoaderID).Scan(&profileName)
+	_ = tx.QueryRow(ctx, `
+		SELECT COALESCE(
+			(SELECT full_name FROM public.user_profiles WHERE id=$1),
+			(SELECT lp."FullName" FROM auth_schema.loader_profiles lp WHERE lp."UserId"=$1)
+		)
+	`, p.LoaderID).Scan(&profileName)
 	if profileName != nil && *profileName != "" {
 		reportedBy = *profileName
 	}
@@ -1590,8 +1639,8 @@ func (r *LoaderRepository) CreateShortfall(ctx context.Context, p ShortfallParam
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO public.outbox_events (aggregate_type, aggregate_id, event_type, payload, status)
-		VALUES ('ISSUE_FLAG', $1, 'FLAG_RAISED', $2, 'PENDING')
-	`, ref, payloadBytes)
+		VALUES ('ISSUE_FLAG', $1, 'FLAG_RAISED', $2::jsonb, 'PENDING')
+	`, ref, string(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert outbox event: %w", err)
 	}
@@ -1606,9 +1655,14 @@ func (r *LoaderRepository) CreateShortfall(ctx context.Context, p ShortfallParam
 
 	var tripLoadedKg float64
 	_ = tx.QueryRow(ctx, `
-		SELECT COALESCE(SUM(weight_kg), 0)::FLOAT8
+		SELECT COALESCE(SUM(CASE
+			WHEN status = 'CHECKED' THEN weight_kg
+			WHEN status = 'ISSUE' AND expected_qty > 0
+				THEN weight_kg * loaded_qty::NUMERIC / expected_qty
+			ELSE 0
+		END), 0)::FLOAT8
 		FROM public.load_items
-		WHERE trip_id = $1 AND status = 'CHECKED'
+		WHERE trip_id = $1 AND status IN ('CHECKED', 'ISSUE')
 	`, p.TripID).Scan(&tripLoadedKg)
 
 	if err := tx.Commit(ctx); err != nil {

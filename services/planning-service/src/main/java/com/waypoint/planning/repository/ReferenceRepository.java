@@ -31,7 +31,7 @@ public class ReferenceRepository implements PlanningMasterDataPort {
                    x.lat::double precision lat,x.lng::double precision lng,COALESCE(o.product_code,items.product_code) product_code,COALESCE(o.quantity,items.quantity,0) quantity,
                    o.weight_kg::double precision weight_kg,o.volume_m3::double precision volume_m3,
                    o.brand,COALESCE(o.temp_requirement::text,CASE WHEN o.order_type::text='chilled' THEN 'CHILLED' ELSE 'AMBIENT' END) temp_requirement,COALESCE(o.preferred_date,o.requested_delivery_date) preferred_date,o.window_open,o.window_close,
-                   o.status::text order_status
+                   CASE WHEN EXISTS (SELECT 1 FROM public.allocations a WHERE a.order_id=o.id AND a.status::text='ALLOCATED') THEN 'PLANNED' ELSE o.status::text END order_status
             FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id
             LEFT JOIN LATERAL (SELECT string_agg(oi.item_name,', ' ORDER BY oi.item_name) product_code,SUM(oi.quantity)::int quantity FROM public.order_items oi WHERE oi.order_id=o.id) items ON true
             WHERE o.id=?
@@ -51,7 +51,7 @@ public class ReferenceRepository implements PlanningMasterDataPort {
                    x.lat::double precision lat,x.lng::double precision lng,COALESCE(o.product_code,items.product_code) product_code,COALESCE(o.quantity,items.quantity,0) quantity,
                    o.weight_kg::double precision weight_kg,o.volume_m3::double precision volume_m3,
                    o.brand,COALESCE(o.temp_requirement::text,CASE WHEN o.order_type::text='chilled' THEN 'CHILLED' ELSE 'AMBIENT' END) temp_requirement,COALESCE(o.preferred_date,o.requested_delivery_date) preferred_date,o.window_open,o.window_close,
-                   o.status::text order_status
+                   CASE WHEN EXISTS (SELECT 1 FROM public.allocations a WHERE a.order_id=o.id AND a.status::text='ALLOCATED') THEN 'PLANNED' ELSE o.status::text END order_status
             FROM public.orders o JOIN public.outlets x ON x.outlet_id=o.outlet_id
             LEFT JOIN LATERAL (SELECT string_agg(oi.item_name,', ' ORDER BY oi.item_name) product_code,SUM(oi.quantity)::int quantity FROM public.order_items oi WHERE oi.order_id=o.id) items ON true
             WHERE COALESCE(o.preferred_date,o.requested_delivery_date)=? ORDER BY o.window_close NULLS LAST,o.created_at

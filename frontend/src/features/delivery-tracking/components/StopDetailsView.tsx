@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { driverDeliveryApi } from '../driverDeliveryApi';
 import {
   ChevronLeft,
   Bell,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 
 interface StopDetailsViewProps {
+  stopId?: string;
   onBack: () => void;
   onOpenCantDeliver: () => void;
   onEnterWaitingWindow: () => void;
@@ -44,45 +46,50 @@ interface StopDetailsViewProps {
 }
 
 export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
+  stopId,
   onBack,
   onOpenCantDeliver,
   onEnterWaitingWindow,
   onArrived,
   onCompleteDelivery,
   onOpenNotifications,
-  stopData = {
-    stopNumber: 3,
-    outletName: 'Keells - K-Zone Moratuwa',
-    outletCode: 'OUT027',
-    city: 'Kandy',
-    window: '09:30 AM – 10:00 AM',
-    windowTag: 'Mall access window',
-    status: 'PENDING',
-    requirements: ['Van only', 'Mall bay', 'Access window'],
-    items: [
-      {
-        type: 'garments',
-        name: 'Hanging Garments',
-        units: 20,
-        weight: '32 kg',
-        storage: 'Ambient',
-      },
-      {
-        type: 'cartons',
-        name: 'Cartons',
-        units: 12,
-        weight: '16 kg',
-        storage: 'Ambient',
-      },
-    ],
-    previousIssue: {
-      reason: 'Outlet closed',
-      date: '18 Sep 2026',
-    },
+  stopData: providedStopData = {
+    stopNumber: 0,
+    outletName: '',
+    outletCode: '',
+    city: '',
+    window: '',
+    windowTag: '',
+    status: '',
+    requirements: [],
+    items: [],
   },
 }) => {
+  const [stopData, setStopData] = useState<NonNullable<StopDetailsViewProps['stopData']>>(providedStopData);
+  const [dataError, setDataError] = useState('');
+  useEffect(() => {
+    if (!stopId) return;
+    let active = true;
+    driverDeliveryApi.stopDetail(stopId).then(detail => {
+      if (!active) return;
+      setStopData({
+        stopNumber: detail.stop_no,
+        outletName: detail.outlet.name,
+        outletCode: detail.outlet.id,
+        city: detail.outlet.district,
+        window: `${detail.delivery_window.open} – ${detail.delivery_window.close}`,
+        windowTag: detail.access_note || 'Delivery window',
+        status: detail.status,
+        requirements: detail.requirements,
+        items: detail.items.map(item => ({ type: 'cartons' as const, name: item.name, units: item.units, weight: `${item.weight_kg} kg`, storage: item.temp_requirement })),
+        previousIssue: detail.previous_skip ? { reason: detail.previous_skip.reason, date: detail.previous_skip.date } : undefined,
+      });
+      setDataError('');
+    }).catch(error => active && setDataError(error instanceof Error ? error.message : 'Unable to load this stop.'));
+    return () => { active = false; };
+  }, [stopId]);
   const [showPodModal, setShowPodModal] = useState<boolean>(false);
-  const [recipientName, setRecipientName] = useState<string>('Mr. Bandara (Store Manager)');
+  const [recipientName, setRecipientName] = useState<string>('');
   const [hasSignature, setHasSignature] = useState<boolean>(false);
   const [photoUploaded, setPhotoUploaded] = useState<boolean>(false);
   const [deliverySuccess, setDeliverySuccess] = useState<boolean>(false);
@@ -196,6 +203,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
 
       {/* Main Inner Content */}
       <div style={{ padding: '16px 20px 0 20px' }}>
+        {dataError && <div role="alert" style={{background:'#fee2e2',color:'#b91c1c',padding:10,borderRadius:10,marginBottom:12}}>{dataError}</div>}
         {/* Navigation & Title Row */}
         <div
           style={{
@@ -375,43 +383,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
             Delivery requirements
           </h3>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <span
-              style={{
-                backgroundColor: '#fef9c3',
-                color: '#854d0e',
-                border: '1px solid #fde047',
-                fontSize: 12,
-                fontWeight: 800,
-                padding: '6px 14px',
-                borderRadius: 20,
-              }}
-            >
-              Van only
-            </span>
-            <span
-              style={{
-                backgroundColor: '#eff6ff',
-                color: '#2563eb',
-                fontSize: 12,
-                fontWeight: 800,
-                padding: '6px 14px',
-                borderRadius: 20,
-              }}
-            >
-              Mall bay
-            </span>
-            <span
-              style={{
-                backgroundColor: '#fef2f2',
-                color: '#dc2626',
-                fontSize: 12,
-                fontWeight: 800,
-                padding: '6px 14px',
-                borderRadius: 20,
-              }}
-            >
-              Access window
-            </span>
+            {stopData.requirements.length ? stopData.requirements.map(requirement => <span key={requirement} style={{background:'#eff6ff',color:'#2563eb',fontSize:12,fontWeight:800,padding:'6px 14px',borderRadius:20}}>{requirement.replaceAll('_',' ')}</span>) : <span style={{fontSize:12,color:'#64748b'}}>No special access requirements</span>}
           </div>
         </div>
 
@@ -443,10 +415,13 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
                 color: '#64748b',
               }}
             >
-              32 units • 48 kg total
+              {stopData.items.reduce((sum,item)=>sum+item.units,0)} units · {stopData.items.reduce((sum,item)=>sum+Number.parseFloat(item.weight),0)} kg total
             </span>
           </div>
 
+          {stopData.items.map(item => <div key={item.name} style={{background:'#fff',borderRadius:20,border:'1px solid #f1f5f9',padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,boxShadow:'0 2px 8px rgba(0,0,0,.02)'}}><div style={{display:'flex',alignItems:'center',gap:14}}><div style={{width:44,height:44,borderRadius:'50%',background:'#f8fafc',border:'1px solid #e2e8f0',display:'grid',placeItems:'center',color:'#64748b'}}>{item.type==='garments'?<Shirt size={22}/>:<Package size={22}/>}</div><div><div style={{fontSize:15.5,fontWeight:800,color:'#0f172a'}}>{item.name}</div><div style={{fontSize:12.5,color:'#64748b',marginTop:2}}>{item.units} units · {item.weight}</div></div></div><span style={{background:'#f1f5f9',color:'#475569',fontSize:12,fontWeight:700,padding:'4px 12px',borderRadius:14,textTransform:'capitalize'}}>{item.storage}</span></div>)}
+          {/* Legacy cards are kept out of rendering; all visible items above come from the Driver API. */}
+          {false && <>
           {/* Item 1 - Hanging Garments */}
           <div
             style={{
@@ -550,6 +525,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
               Ambient
             </span>
           </div>
+          </>}
         </div>
 
         {/* Skipped on Previous Run Alert Card */}
@@ -670,7 +646,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
             lineHeight: 1.4,
           }}
         >
-          Arrival time is recorded automatically. Before 09:30 AM, you'll enter the waiting state.
+          Arrival time is recorded automatically. If the delivery window is not open, you'll enter the waiting state.
         </p>
 
         {/* Quick link to preview waiting state directly */}
@@ -804,7 +780,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
                     fontWeight: 600,
                   }}
                 >
-                  <span>Window: 09:30 AM – 10:00 AM</span>
+                  <span>Window: {stopData.window}</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -968,7 +944,7 @@ export const StopDetailsView: React.FC<StopDetailsViewProps> = ({
                       <>
                         <CheckCircle2 size={20} color="#16a34a" />
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
-                          MallBay_OUT027_Proof.jpg attached
+                          Delivery photo attached
                         </span>
                       </>
                     ) : (

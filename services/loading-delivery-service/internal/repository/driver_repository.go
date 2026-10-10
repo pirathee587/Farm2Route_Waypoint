@@ -22,8 +22,17 @@ func (r *DriverRepository) GetDriverVehicle(ctx context.Context, driverID uuid.U
 	var d model.DriverSummary
 	var v model.DriverVehicle
 	err := r.pool.QueryRow(ctx, `
-		SELECT p.id::text, p.full_name, v.vehicle_id, v.type::text, v.depot
-		FROM public.user_profiles p
+		WITH driver_identity AS (
+			SELECT id,full_name FROM public.user_profiles WHERE id=$1 AND role='DRIVER' AND is_active=TRUE
+			UNION ALL
+			SELECT dp."UserId",dp."FullName" FROM auth_schema.driver_profiles dp
+			JOIN auth_schema.users u ON u."Id"=dp."UserId"
+			WHERE dp."UserId"=$1 AND u."Role"='DRIVER' AND UPPER(u."Status"::text)='ACTIVE'
+			LIMIT 1
+		)
+		SELECT p.id::text, p.full_name, v.vehicle_id, v.type::text, v.depot,
+		       v.registration, COALESCE(NULLIF(v.display_name,''), v.vehicle_id)
+		FROM driver_identity p
 		JOIN LATERAL (
 			SELECT candidate.vehicle_id FROM (
 				SELECT t.vehicle_id, 0 AS priority, t.delivery_date
@@ -31,10 +40,13 @@ func (r *DriverRepository) GetDriverVehicle(ctx context.Context, driverID uuid.U
 				UNION ALL
 				SELECT owned.vehicle_id, 1 AS priority, CURRENT_DATE
 				FROM public.vehicles owned WHERE owned.driver_id=p.id AND owned.is_active=TRUE
-			) candidate ORDER BY candidate.priority, candidate.delivery_date DESC LIMIT 1
+			) candidate
+			JOIN public.trips latest_trip ON latest_trip.vehicle_id=candidate.vehicle_id AND latest_trip.driver_id=p.id
+			ORDER BY candidate.priority, candidate.delivery_date DESC,
+			         COALESCE(latest_trip.confirmed_at, latest_trip.created_at) DESC LIMIT 1
 		) assigned ON TRUE
 		JOIN public.vehicles v ON v.vehicle_id=assigned.vehicle_id AND v.is_active=TRUE
-		WHERE p.id=$1 AND p.role='DRIVER' AND p.is_active=TRUE`, driverID).Scan(&d.ID, &d.Name, &v.ID, &v.Type, &v.Depot)
+	`, driverID).Scan(&d.ID, &d.Name, &v.ID, &v.Type, &v.Depot, &v.Registration, &v.DisplayName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, v, model.ErrNotFound("No active vehicle assigned to driver")
 	}
@@ -45,10 +57,13 @@ func (r *DriverRepository) GetDriverVehicle(ctx context.Context, driverID uuid.U
 }
 
 func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, vehicleID string, date time.Time) ([]model.DriverTripRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT trip_id::text, trip_number, status::text, ready_at FROM public.trips
+	rows, err := r.pool.Query(ctx, `SELECT trip_id::text, trip_code, trip_number, status::text, ready_at FROM public.trips
 		WHERE driver_id=$1
-		  AND (delivery_date=$2::date OR (ready_at IS NOT NULL AND status::text NOT IN ('COMPLETED','CANCELLED')))
-		  AND trip_number IS NOT NULL ORDER BY delivery_date,trip_number`, driverID, date.Format("2006-01-02"))
+		  AND vehicle_id=$3
+		  AND (delivery_date=$2::date OR
+		       (delivery_date >= $2::date AND status::text IN ('CONFIRMED','READY_FOR_LOADING','PLANNED','LOADING','IN_PROGRESS')))
+		  AND trip_number IS NOT NULL
+		ORDER BY COALESCE(confirmed_at,created_at) DESC`, driverID, date.Format("2006-01-02"), vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("get driver trips: %w", err)
 	}
@@ -56,7 +71,7 @@ func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, veh
 	result := []model.DriverTripRecord{}
 	for rows.Next() {
 		var x model.DriverTripRecord
-		if err := rows.Scan(&x.ID, &x.TripNumber, &x.Status, &x.ReadyAt); err != nil {
+		if err := rows.Scan(&x.ID, &x.TripCode, &x.TripNumber, &x.Status, &x.ReadyAt); err != nil {
 			return nil, err
 		}
 		result = append(result, x)
@@ -66,7 +81,7 @@ func (r *DriverRepository) GetTrips(ctx context.Context, driverID uuid.UUID, veh
 
 func (r *DriverRepository) GetTrip(ctx context.Context, driverID, tripID uuid.UUID) (model.DriverTripRecord, error) {
 	var x model.DriverTripRecord
-	err := r.pool.QueryRow(ctx, `SELECT trip_id::text, trip_number, status::text, ready_at FROM public.trips WHERE trip_id=$1 AND driver_id=$2`, tripID, driverID).Scan(&x.ID, &x.TripNumber, &x.Status, &x.ReadyAt)
+	err := r.pool.QueryRow(ctx, `SELECT trip_id::text, trip_code, trip_number, status::text, ready_at FROM public.trips WHERE trip_id=$1 AND driver_id=$2`, tripID, driverID).Scan(&x.ID, &x.TripCode, &x.TripNumber, &x.Status, &x.ReadyAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool
 		if e := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.trips WHERE trip_id=$1)`, tripID).Scan(&exists); e != nil {

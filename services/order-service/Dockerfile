@@ -5,11 +5,11 @@ FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app/services/order-service
 
 COPY services/order-service/pom.xml .
-RUN mvn dependency:go-offline -B --no-transfer-progress
+RUN mvn -U dependency:go-offline -B --no-transfer-progress
 
 COPY services/order-service/src ./src
 COPY proto /app/proto
-RUN mvn package -DskipTests -B --no-transfer-progress
+RUN mvn -U package -DskipTests -B --no-transfer-progress
 
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app

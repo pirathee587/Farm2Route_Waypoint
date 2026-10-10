@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError, OrderDetails, OrderIssue, OrderSummary, OrderTimelineEntry, ordersApi } from '@/shared/api/apiClient';
 import { IssueReportModal } from './IssueReportModal';
 import './OrderHistoryPage.css';
+import { orderReference } from '@/shared/utils/displayReferences';
 
 type DetailTab = 'timeline' | 'items' | 'notes';
 
@@ -106,7 +107,7 @@ export function OrderHistoryPage() {
             <div className="history-list">
               {filteredOrders.map((order) => (
                 <button className={`history-row${selectedId === order.id ? ' is-selected' : ''}`} key={order.id} onClick={() => setSelectedId(order.id)} type="button">
-                  <span className="history-row-main"><strong>{order.summary || 'Order items'}</strong><span>{order.id.slice(0, 8)} · {formatDate(order.requested_delivery_date)}</span></span>
+                  <span className="history-row-main"><strong>{order.summary || 'Order items'}</strong><span>{orderReference(order.id, order.created_at)} · {formatDate(order.requested_delivery_date)}</span></span>
                   <span className={`order-status status-${order.status.toLowerCase()}`}>{order.status}</span>
                   <ChevronRight size={16} />
                 </button>
@@ -119,7 +120,7 @@ export function OrderHistoryPage() {
           {!selectedId ? <div className="history-detail-empty"><Package size={26} /><p>Select an order to view details.</p></div> : isDetailLoading || !selectedOrder ? <div className="history-detail-empty">Loading details...</div> : (
             <>
               <div className="history-detail-header">
-                <div><p className="dashboard-kicker">Order details</p><h3>{selectedOrder.id.slice(0, 8)}</h3><span>Requested for {formatDate(selectedOrder.requested_delivery_date)}</span></div>
+                <div><p className="dashboard-kicker">Order details</p><h3>{orderReference(selectedOrder.id, selectedOrder.created_at)}</h3><span>Requested for {formatDate(selectedOrder.requested_delivery_date)}</span></div>
                 <button aria-label="Close detail panel" className="history-close" onClick={() => setSelectedId(null)} type="button"><X size={18} /></button>
               </div>
               <div className="history-detail-meta"><span className={`order-status status-${selectedOrder.status.toLowerCase()}`}>{selectedOrder.status}</span><span>{selectedOrder.brand}{selectedOrder.order_type ? ` · ${selectedOrder.order_type}` : ''}</span></div>

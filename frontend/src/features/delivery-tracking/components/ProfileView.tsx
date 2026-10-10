@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { DriverRunSheet, driverDeliveryApi } from '../driverDeliveryApi';
 import {
   User,
   Truck,
@@ -19,6 +20,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onLogout,
   currentUser,
 }) => {
+  const [runSheet, setRunSheet] = useState<DriverRunSheet | null>(null);
+  useEffect(() => { let active=true; driverDeliveryApi.today().then(data => active && setRunSheet(data)).catch(() => {}); return () => { active=false; }; }, []);
   return (
     <div className="driver-screen-content animate-fade-in">
       {/* Header */}
@@ -77,7 +80,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, color: '#ffffff' }}>
-            {currentUser?.fullName || 'Kumar'}
+            {runSheet?.driver.name || currentUser?.fullName || 'Driver'}
           </div>
           <div
             style={{
@@ -87,7 +90,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               marginTop: 2,
             }}
           >
-            {currentUser?.email ? currentUser.email : 'Driver ID: DRV014'}
+            {currentUser?.email || (runSheet ? `Driver ID: ${runSheet.driver.id}` : 'Driver account')}
           </div>
           <span
             style={{
@@ -150,13 +153,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
             <div>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
-                VEH014
+                {runSheet?.vehicle.display_name || runSheet?.vehicle.id || 'No vehicle assigned'}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
                 Vehicle type: Van
               </div>
               <div style={{ fontSize: 12, color: '#64748b' }}>
-                Depot: Peliyagoda
+                {runSheet?.vehicle ? `${runSheet.vehicle.id} · ${runSheet.vehicle.registration} · Depot: ${runSheet.vehicle.depot}` : 'Vehicle assignment unavailable'}
               </div>
             </div>
           </div>

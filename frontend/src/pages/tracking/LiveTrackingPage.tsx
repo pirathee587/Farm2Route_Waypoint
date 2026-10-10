@@ -25,7 +25,9 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
 }) => {
   const [trips, setTrips] = useState<ActiveTrip[]>([]);
   const [summary, setSummary] = useState<LiveTrackingSummary>({activeTripsCount:0,onTimeCount:0,atRiskCount:0,issuesCount:0,lastUpdated:''});
-  const [selectedTripId, setSelectedTripId] = useState<string>(initialTripId || 'TRIP-0925-014');
+  const [selectedTripId, setSelectedTripId] = useState<string>(initialTripId || '');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ON_TIME' | 'AT_RISK' | 'ISSUE'>('ALL');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -41,7 +43,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
       setTrips(data.trips);
       setSummary(data.summary);
       if (!data.trips.some(trip => trip.id === selectedTripId) && data.trips[0]) handleSelectTrip(data.trips[0].id);
-    });
+    }).catch(() => setError('Live tracking data could not be loaded. Please refresh.')).finally(() => setLoading(false));
   }, []);
 
   const handleSelectTrip = (id: string) => {
@@ -53,11 +55,14 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    setError('');
     try {
       const data = await fetchLiveTrackingData();
       setTrips(data.trips);
       setSummary(data.summary);
       if (!data.trips.some(trip => trip.id === selectedTripId) && data.trips[0]) handleSelectTrip(data.trips[0].id);
+    } catch {
+      setError('Live tracking data could not be loaded. Please refresh.');
     } finally {
       setIsRefreshing(false);
     }
@@ -315,7 +320,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                     color: '#10B981',
                   }}
                 >
-                  8 LIVE
+                  {trips.length} LIVE
                 </span>
               </div>
 
@@ -376,7 +381,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                     color: activeFilter === 'ALL' ? '#ffffff' : '#64748b',
                   }}
                 >
-                  All 8
+                  All {trips.length}
                 </button>
                 <button
                   onClick={() => setActiveFilter('ON_TIME')}
@@ -391,7 +396,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                     color: activeFilter === 'ON_TIME' ? '#ffffff' : '#64748b',
                   }}
                 >
-                  On Time 6
+                  On Time {summary.onTimeCount}
                 </button>
                 <button
                   onClick={() => setActiveFilter('AT_RISK')}
@@ -406,7 +411,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                     color: activeFilter === 'AT_RISK' ? '#ffffff' : '#64748b',
                   }}
                 >
-                  At Risk 1
+                  At Risk {summary.atRiskCount}
                 </button>
                 <button
                   onClick={() => setActiveFilter('ISSUE')}
@@ -421,7 +426,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                     color: activeFilter === 'ISSUE' ? '#ffffff' : '#64748b',
                   }}
                 >
-                  Issue 1
+                  Issue {summary.issuesCount}
                 </button>
               </div>
 
@@ -432,7 +437,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                   <ActiveTripCard
                     key={trip.id}
                     trip={trip}
-                    isSelected={trip.id === selectedTrip.id}
+                    isSelected={trip.id === selectedTrip?.id}
                     onSelect={handleSelectTrip}
                   />
                 ))}
@@ -465,7 +470,7 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
                     Live Operations Map
                   </div>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '1px' }}>
-                    8 active vehicles
+                    {trips.length} active vehicles
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -475,20 +480,20 @@ export const LiveTrackingPage: React.FC<LiveTrackingPageProps> = ({
               </div>
 
               {/* SVG Map Canvas */}
-              <LiveOperationsMapCanvas trip={selectedTrip} isLargeView={false} />
+              {selectedTrip ? <LiveOperationsMapCanvas trip={selectedTrip} trips={trips} isLargeView={false} /> : <div style={{padding:'72px 24px',textAlign:'center',color:'#64748b'}}>{loading ? 'Loading live trips...' : error || 'No active trips for today.'}</div>}
             </div>
 
             {/* Route Progress */}
-            <RouteProgressWidget trip={selectedTrip} />
+            {selectedTrip && <RouteProgressWidget trip={selectedTrip} />}
           </div>
 
           {/* Column 3: Trip Details Sidebar */}
-          <TripDetailsSidebar
+          {selectedTrip && <TripDetailsSidebar
             trip={selectedTrip}
             onViewFullTrip={(tripId) => {
               onNavigateGlobal(`live-trip-detail/${tripId}`);
             }}
-          />
+          />}
         </div>
       </main>
     </div>

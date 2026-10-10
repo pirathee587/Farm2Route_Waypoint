@@ -62,7 +62,12 @@ func (r *DriverRepository) CantDeliver(ctx context.Context, driverID, stopID, ac
 		return model.CantDeliverResponse{}, model.NewAppError(model.ErrCodeConflict, "Only the current unfinished stop can be reported", 409)
 	}
 	var orderID uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT a.order_id FROM public.allocations a JOIN public.orders o ON o.order_id=a.order_id WHERE a.trip_id=$1 AND o.outlet_id=$2 AND a.status='ALLOCATED' ORDER BY a.stop_index,a.created_at LIMIT 1`, tripID, outletID).Scan(&orderID)
+	err = tx.QueryRow(ctx, `SELECT a.order_id
+		FROM public.allocations a
+		LEFT JOIN public.orders o ON o.order_id=a.order_id
+		WHERE a.trip_id=$1 AND a.status='ALLOCATED'
+		  AND (o.outlet_id=$2 OR a.order_id IN (SELECT li.order_id FROM public.load_items li WHERE li.stop_id=$3))
+		ORDER BY CASE WHEN o.outlet_id=$2 THEN 0 ELSE 1 END,a.stop_index,a.created_at LIMIT 1`, tripID, outletID, stopID).Scan(&orderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.CantDeliverResponse{}, model.NewAppError(model.ErrCodeConflict, "Stop has no allocated order", 409)
 	}
@@ -80,10 +85,14 @@ func (r *DriverRepository) CantDeliver(ctx context.Context, driverID, stopID, ac
 	if err != nil {
 		return model.CantDeliverResponse{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO public.deferral_records(order_id,outlet_id,delivery_date,reason,constraint_type,retry_date,notified,note,driver_id,vehicle_id,trip_id,stop_id,reported_at,client_action_id,created_at) VALUES($1,$2,($3 AT TIME ZONE 'Asia/Colombo')::date,$4,'NONE',(($3 AT TIME ZONE 'Asia/Colombo')::date+1),FALSE,$5,$6,$7,$8,$9,$3,$10,$3)`, orderID, outletID, effectiveTime, reason, note, driverID, vehicleID, tripID, stopID, actionID)
+	_, err = tx.Exec(ctx, `INSERT INTO public.deferral_records(order_id,outlet_id,delivery_date,reason,constraint_type,retry_date,notified,note,driver_id,vehicle_id,trip_id,stop_id,reported_at,client_action_id,created_at)
+		VALUES($1,$2,($3 AT TIME ZONE 'Asia/Colombo')::date,$4,'NONE',(($3 AT TIME ZONE 'Asia/Colombo')::date+1),FALSE,$5,
+		CASE WHEN EXISTS(SELECT 1 FROM auth.users u WHERE u.id=$6::uuid) THEN $6::uuid ELSE NULL::uuid END,$7,$8,$9,$3,$10,$3)`, orderID, outletID, effectiveTime, reason, note, driverID, vehicleID, tripID, stopID, actionID)
 	if err != nil {
 		return model.CantDeliverResponse{}, fmt.Errorf("save deferral: %w", err)
 	}
+	_, err = tx.Exec(ctx, `INSERT INTO public.delivery_tracking(order_id,status,is_delayed,source_note,updated_at) VALUES($1,'delivery_attempted',TRUE,$2,$3)`, orderID, "Can't deliver: "+reason, serverTime)
+	if err != nil { return model.CantDeliverResponse{}, fmt.Errorf("update store tracking after cant-deliver: %w", err) }
 	payload := `jsonb_build_object('shortfall_ref','CD-'||$1::text,'trip_id',$6,'trip_code',$6::text,'item_sku',$2,'item_name',$3,'reason',$4,'reported_by_id',$8,'created_at',$10,'outlet_id',$2,'note',$5,'stop_id',$7,'driver_id',$8,'vehicle_id',$9,'reported_at',$10)`
 	_, err = tx.Exec(ctx, `INSERT INTO public.outbox_events(id,aggregate_type,aggregate_id,event_type,payload,status,created_at) VALUES(uuid_generate_v5($1,'flag-raised'),'ISSUE_FLAG',$7,'FLAG_RAISED',`+payload+`,'PENDING',$10) ON CONFLICT(id) DO NOTHING`, actionID, outletID, outletName, reason, note, tripID, stopID, driverID, vehicleID, effectiveTime)
 	if err != nil {

@@ -10,9 +10,11 @@ type DriverSummary struct {
 }
 
 type DriverVehicle struct {
-	ID    string `json:"id"`
-	Type  string `json:"type"`
-	Depot string `json:"depot"`
+	ID           string `json:"id"`
+	Type         string `json:"type"`
+	Depot        string `json:"depot"`
+	Registration string `json:"registration"`
+	DisplayName  string `json:"display_name"`
 }
 
 type DriverStop struct {
@@ -28,6 +30,7 @@ type DriverStop struct {
 
 type DriverTrip struct {
 	ID              string       `json:"trip_id"`
+	TripCode        string       `json:"trip_code"`
 	TripNumber      int          `json:"trip_number"`
 	Status          string       `json:"status"`
 	TotalStops      int          `json:"total_stops"`
@@ -46,6 +49,7 @@ type DriverTodayResponse struct {
 
 type DriverTripRecord struct {
 	ID         string
+	TripCode   string
 	TripNumber int
 	Status     string
 	ReadyAt    *time.Time

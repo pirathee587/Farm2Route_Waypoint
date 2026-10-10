@@ -160,7 +160,7 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, onClick }) => {
               textTransform: 'uppercase',
             }}
           >
-            VEHICLE ID
+            TRIP
           </span>
           <span
             style={{
@@ -172,7 +172,7 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, onClick }) => {
               marginTop: '1px',
             }}
           >
-            {trip.vehicleId}
+            {trip.tripCode}
           </span>
           <span
             style={{
@@ -182,7 +182,7 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, onClick }) => {
               marginTop: '2px',
             }}
           >
-            {trip.weightLoaded.toLocaleString()} / {trip.weightCapacity.toLocaleString()} kg
+            {trip.vehicleId} · {trip.weightLoaded.toLocaleString()} / {trip.weightCapacity.toLocaleString()} kg
           </span>
         </div>
       </div>

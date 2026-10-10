@@ -46,12 +46,12 @@ func TestDeriveLoadingStatus(t *testing.T) {
 			expected:      DerivedStatusReady,
 		},
 		{
-			name:          "Progress 100% is still Loading if confirmation is not yet LOADED/ready",
+			name:          "Progress 100% is Ready when the full checklist is reviewed",
 			hasOpenIssues: false,
 			confStatus:    LoadingStatusLoading,
 			hasReadyAt:    false,
 			progressPct:   100,
-			expected:      DerivedStatusLoading,
+			expected:      DerivedStatusReady,
 		},
 		{
 			name:          "Loading when progress > 0",
@@ -62,12 +62,12 @@ func TestDeriveLoadingStatus(t *testing.T) {
 			expected:      DerivedStatusLoading,
 		},
 		{
-			name:          "Loading when confStatus is LOADING even with 0 progress",
+			name:          "Not Started when confStatus is LOADING but there is no real progress",
 			hasOpenIssues: false,
 			confStatus:    LoadingStatusLoading,
 			hasReadyAt:    false,
 			progressPct:   0,
-			expected:      DerivedStatusLoading,
+			expected:      DerivedStatusNotStarted,
 		},
 		{
 			name:          "Not Started when status is PENDING and 0 progress",

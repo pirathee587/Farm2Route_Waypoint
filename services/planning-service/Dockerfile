@@ -11,14 +11,14 @@ WORKDIR /app
 
 # Copy pom.xml first for dependency layer caching
 COPY services/planning-service/pom.xml .
-RUN mvn dependency:go-offline -B --no-transfer-progress
+RUN mvn -U dependency:go-offline -B --no-transfer-progress
 
 # Copy source and the shared protobuf contracts used by the Maven generator.
 COPY services/planning-service/src ./src
 COPY proto /proto
 
 # Package — skip tests in Docker build (run in CI separately)
-RUN mvn package -DskipTests -B --no-transfer-progress
+RUN mvn -U package -DskipTests -B --no-transfer-progress
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine AS runtime

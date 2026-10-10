@@ -171,7 +171,20 @@ func (r *AllocationRepository) applyTrip(ctx context.Context, tx pgx.Tx, event m
 			if err != nil {
 				return fmt.Errorf("invalid order_id %q: %w", order.OrderID, err)
 			}
-			for _, item := range order.Items {
+			items, err := authoritativeOrderItems(ctx, tx, orderID, order.Items)
+			if err != nil {
+				return fmt.Errorf("load authoritative items for order %s: %w", order.OrderID, err)
+			}
+			if len(items) > 0 {
+				// Remove the old planning-generated aggregate row. The loader checklist must
+				// reflect exactly what the store manager entered in order_items.
+				if _, err = tx.Exec(ctx, `DELETE FROM public.load_items WHERE trip_id=$1 AND order_id=$2 AND status='PENDING'`, tripID, orderID); err != nil {
+					return fmt.Errorf("replace aggregate items for order %s: %w", order.OrderID, err)
+				}
+			} else {
+				items = order.Items
+			}
+			for _, item := range items {
 				itemID := stableUUID(tripID, order.OrderID+":"+item.SKU)
 				if item.ItemID != "" {
 					itemID, err = uuid.Parse(item.ItemID)
@@ -197,6 +210,57 @@ func (r *AllocationRepository) applyTrip(ctx context.Context, tx pgx.Tx, event m
 
 	_, err = tx.Exec(ctx, `INSERT INTO public.allocation_event_receipts(trip_id,plan_revision) VALUES($1,$2) ON CONFLICT DO NOTHING`, tripID, event.Revision)
 	return err
+}
+
+// authoritativeOrderItems reads the Store Manager's submitted line items. Older
+// seeded orders do not have order_items rows, so their event payload remains the
+// backward-compatible fallback.
+func authoritativeOrderItems(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, fallback []model.AllocationItem) ([]model.AllocationItem, error) {
+	rows, err := tx.Query(ctx, `SELECT id,item_name,quantity,unit FROM public.order_items WHERE order_id=$1 ORDER BY id`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	totalQty := 0
+	totalWeight := 0.0
+	tags := []string{}
+	for _, item := range fallback {
+		totalQty += item.ExpectedQty
+		totalWeight += item.WeightKg
+		if len(tags) == 0 && len(item.Tags) > 0 {
+			tags = append(tags, item.Tags...)
+		}
+	}
+
+	items := []model.AllocationItem{}
+	for rows.Next() {
+		var id uuid.UUID
+		var name, unit string
+		var qty int
+		if err := rows.Scan(&id, &name, &qty, &unit); err != nil {
+			return nil, err
+		}
+		weight := 0.0
+		if totalQty > 0 {
+			weight = totalWeight * float64(qty) / float64(totalQty)
+		}
+		items = append(items, model.AllocationItem{
+			ItemID: id.String(), SKU: readableSKU(name), Name: name,
+			ExpectedQty: qty, Unit: unit, WeightKg: weight, Tags: append([]string(nil), tags...),
+		})
+	}
+	return items, rows.Err()
+}
+
+func readableSKU(name string) string {
+	parts := strings.FieldsFunc(strings.ToUpper(strings.TrimSpace(name)), func(r rune) bool {
+		return !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+	})
+	if len(parts) == 0 {
+		return "ITEM"
+	}
+	return strings.Join(parts, "-")
 }
 
 func loadPlanSnapshots(ctx context.Context, tx pgx.Tx, tripID uuid.UUID) ([]model.PlanStopSnapshot, error) {

@@ -21,7 +21,8 @@ var dbPort = builder.Configuration["SUPABASE_DB_PORT"];
 var dbName = builder.Configuration["SUPABASE_DB_NAME"];
 var dbUser = builder.Configuration["SUPABASE_DB_USER"];
 var dbPassword = builder.Configuration["SUPABASE_DB_PASSWORD"];
-var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};Pooling=true;Maximum Pool Size=4;Minimum Pool Size=0;SSL Mode=Require;Trust Server Certificate=true";
+var dbSslMode = builder.Configuration["DB_SSL_MODE"] ?? "Require";
+var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};Pooling=true;Maximum Pool Size=4;Minimum Pool Size=0;SSL Mode={dbSslMode};Trust Server Certificate=true";
 
 builder.Services.AddDbContext<AuthDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IUserRepository, UserRepository>();

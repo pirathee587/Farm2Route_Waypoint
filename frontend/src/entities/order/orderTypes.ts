@@ -9,6 +9,7 @@ export type Brand = 'Fresh' | 'Style' | 'Tech';
 
 export interface QueueOrder {
   id: string;
+  reference: string;
   receivedAt: string;
   isNew: boolean;
   outletName: string;

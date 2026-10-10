@@ -89,7 +89,7 @@ export const OrderDetailsPage: React.FC<OrderDetailsPageProps> = ({ orderId, onN
         <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '24px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e2e8f0' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>{data.id}</span>
+              <span style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>{data.reference}</span>
               {data.status === 'Unplanned' && <span style={{ padding: '4px 16px', borderRadius: '20px', backgroundColor: '#fff', border: '1px solid #FDE68A', color: '#D97706', fontSize: '11px', fontWeight: 700 }}>UNPLANNED</span>}
               {data.isNew && <span style={{ padding: '4px 16px', borderRadius: '20px', backgroundColor: '#FEF3C7', color: '#D97706', fontSize: '11px', fontWeight: 700 }}>NEW</span>}
             </div>

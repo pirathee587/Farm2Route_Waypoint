@@ -36,6 +36,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
 
   // Driver Geolocation
   const [driverLocation, setDriverLocation] = useState<DriverGeoLocation | null>(null);
+  const [routePreviewLocation, setRoutePreviewLocation] = useState<DriverGeoLocation | null>(null);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState<boolean>(false);
   const lastFetchedLocationRef = useRef<DriverGeoLocation | null>(null);
   const driverLocationRef = useRef<DriverGeoLocation | null>(null);
@@ -298,6 +299,26 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
     };
   }, [movementThresholdMeters, fetchRoute, sendLocation]);
 
+  // Desktop browsers often have no usable GPS. In that case, animate a clearly
+  // identified route preview along the real Mapbox road geometry instead of
+  // showing a fixed dummy marker. Real device GPS always takes priority.
+  useEffect(() => {
+    if (driverLocation) {
+      setRoutePreviewLocation(null);
+      return;
+    }
+    const coordinates = routeData?.route_geometry?.coordinates || [];
+    if (coordinates.length < 2) return;
+    let index = 0;
+    setRoutePreviewLocation({ lng: coordinates[0][0], lat: coordinates[0][1], accuracy: 0, heading: null, speed: null });
+    const timer = window.setInterval(() => {
+      index = (index + 1) % coordinates.length;
+      const [lng, lat] = coordinates[index];
+      setRoutePreviewLocation({ lng, lat, accuracy: 0, heading: null, speed: null });
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [driverLocation, routeData?.route_geometry]);
+
   // 4. Polling Timer: 20s while page is visible, pause on document.hidden
   useEffect(() => {
     if (!tripId) return;
@@ -371,7 +392,8 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
     error,
     isOfflineCache,
     isFallbackSource: routeData?.route_source === 'fallback',
-    driverLocation,
+    driverLocation: driverLocation ?? routePreviewLocation,
+    isRoutePreview: !driverLocation && !!routePreviewLocation,
     locationPermissionDenied,
     routeUpdatedToast,
     refetch: () => {

@@ -5,7 +5,7 @@ import com.waypoint.planning.entity.TripStatus;import com.waypoint.planning.jpa.
  private static final List<TripStatus> EXECUTABLE=List.of(TripStatus.CONFIRMED,TripStatus.READY_FOR_LOADING,TripStatus.PLANNED,TripStatus.LOADING,TripStatus.IN_PROGRESS,TripStatus.COMPLETED);
  private final TripJpaRepository trips;private final AllocationJpaRepository allocations;private final DeferralRecordJpaRepository deferrals;private final JdbcTemplate jdbc;
  public PlanningRepository(TripJpaRepository trips,AllocationJpaRepository allocations,DeferralRecordJpaRepository deferrals,JdbcTemplate jdbc){this.trips=trips;this.allocations=allocations;this.deferrals=deferrals;this.jdbc=jdbc;}
- public int tripCount(String vehicleId,LocalDate date){return Math.toIntExact(trips.countByVehicleIdAndPlanningDateAndStatusNot(vehicleId,date,TripStatus.CANCELLED));}
+ public int tripCount(String vehicleId,LocalDate date){List<Integer> used=jdbc.query("SELECT trip_number::int FROM public.trips WHERE vehicle_id=? AND delivery_date=? AND status::text IN ('CONFIRMED','READY_FOR_LOADING','PLANNED','LOADING','IN_PROGRESS','COMPLETED')",(rs,n)->rs.getInt(1),vehicleId,date);if(!used.contains(1))return 0;if(!used.contains(2))return 1;return 2;}
  public boolean orderAlreadyAllocated(UUID orderId,LocalDate date){return allocations.countAllocatedForDate(orderId,date)>0;}
  public List<UUID> allocatedOrderIds(LocalDate date){return allocations.findAllocatedOrderIds(date);}
  public List<UUID> activeOrderIds(LocalDate date){return allocations.findActiveOrderIds(date);}

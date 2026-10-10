@@ -32,8 +32,9 @@ func (r *DriverRepository) GetPODContext(ctx context.Context, driverID, stopID u
 	var x model.PODContext
 	var removed bool
 	var arrival *string
+	var arrivedAt *time.Time
 	var delivery string
-	err := r.pool.QueryRow(ctx, `SELECT ls.stop_id,ls.trip_id,t.driver_id,ls.outlet_id,ls.outlet_name,t.vehicle_id,ls.arrived_at,ls.removed_from_plan,ls.arrival_status,COALESCE(ls.delivery_status,'') FROM public.load_stops ls JOIN public.trips t ON t.trip_id=ls.trip_id WHERE ls.stop_id=$1`, stopID).Scan(&x.StopID, &x.TripID, &x.DriverID, &x.OutletID, &x.OutletName, &x.VehicleID, &x.ArrivedAt, &removed, &arrival, &delivery)
+	err := r.pool.QueryRow(ctx, `SELECT ls.stop_id,ls.trip_id,t.driver_id,ls.outlet_id,ls.outlet_name,t.vehicle_id,ls.arrived_at,ls.removed_from_plan,ls.arrival_status,COALESCE(ls.delivery_status,'') FROM public.load_stops ls JOIN public.trips t ON t.trip_id=ls.trip_id WHERE ls.stop_id=$1`, stopID).Scan(&x.StopID, &x.TripID, &x.DriverID, &x.OutletID, &x.OutletName, &x.VehicleID, &arrivedAt, &removed, &arrival, &delivery)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return x, model.ErrNotFound("Stop not found")
 	}
@@ -48,6 +49,9 @@ func (r *DriverRepository) GetPODContext(ctx context.Context, driverID, stopID u
 	}
 	if arrival == nil || *arrival != "ARRIVED" {
 		return x, model.NewAppError(model.ErrCodeConflict, "Stop must be ARRIVED before proof of delivery", 409)
+	}
+	if arrivedAt != nil {
+		x.ArrivedAt = *arrivedAt
 	}
 	rows, err := r.pool.Query(ctx, `SELECT item_id::text,name,expected_qty,expected_qty,'PENDING' FROM public.load_items WHERE stop_id=$1 ORDER BY name`, stopID)
 	if err != nil {

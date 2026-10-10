@@ -20,6 +20,7 @@ import { OrderDetailsPage } from '@/pages/orders/OrderDetailsPage';
 import { RoutePlanningPage } from '@/pages/planning/RoutePlanningPage';
 import { PlannedTripDetailPage } from '@/pages/planning/PlannedTripDetailPage';
 import { LoadingShortfallReviewPage } from '@/pages/planning/LoadingShortfallReviewPage';
+import { CantDeliverReviewPage } from '@/pages/planning/CantDeliverReviewPage';
 import { CapacityShortfallPage } from '@/pages/planning/CapacityShortfallPage';
 import { DeferredOrdersPage } from '@/pages/planning/DeferredOrdersPage';
 import { LiveTrackingPage } from '@/pages/tracking/LiveTrackingPage';
@@ -30,7 +31,7 @@ import { ReportsPage } from '@/pages/reports/ReportsPage';
 import type { QueueOrder } from '@/entities/order/orderTypes';
 
 type DispatcherRoute = 'dashboard' | 'orders' | 'order-details' | 'planning' | 'planned-trip' |
-  'loading-shortfall' |
+  'loading-shortfall' | 'cant-deliver-review' |
   'capacity-shortfall' | 'deferred-orders' | 'live-tracking' | 'live-trip-detail' |
   'live-trip-map' | 'fleet' | 'reports';
 
@@ -40,6 +41,7 @@ function routeFromPath(pathname: string): { route: DispatcherRoute; id?: string 
   if (p[1] === 'orders' && p[2]) return { route: 'order-details', id: decodeURIComponent(p[2]) };
   if (p[1] === 'orders') return { route: 'orders' };
   if (p[1] === 'planning' && p[2] === 'trips' && p[3] && p[4] === 'loading-shortfall') return { route: 'loading-shortfall', id: decodeURIComponent(p[3]) };
+  if (p[1] === 'delivery' && p[2] === 'cant-deliver' && p[3]) return { route:'cant-deliver-review',id:decodeURIComponent(p[3]) };
   if (p[1] === 'planning' && p[2] === 'trips' && p[3]) return { route: 'planned-trip', id: decodeURIComponent(p[3]) };
   if (p[1] === 'planning' && p[2] === 'shortfall') return { route: 'capacity-shortfall' };
   if (p[1] === 'planning') return { route: 'planning' };
@@ -71,6 +73,7 @@ export const App: React.FC = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(initial.route === 'order-details' ? initial.id ?? null : null);
   const [plannedTripId, setPlannedTripId] = useState<string | null>(initial.route === 'planned-trip' ? initial.id ?? null : null);
   const [shortfallTripId, setShortfallTripId] = useState<string | null>(initial.route === 'loading-shortfall' ? initial.id ?? null : null);
+  const [cantDeliverId,setCantDeliverId]=useState<string|null>(initial.route==='cant-deliver-review'?initial.id??null:null);
   const [planningSelectedOrders, setPlanningSelectedOrders] = useState<QueueOrder[]>([]);
   const [selectedTrackingTripId, setSelectedTrackingTripId] = useState(initial.route === 'live-trip-detail' || initial.route === 'live-trip-map' ? initial.id ?? '' : 'TRIP-0925-014');
   const [currentUser, setCurrentUser] = useState<{ email: string; role?: string } | null>(() => {
@@ -99,6 +102,7 @@ export const App: React.FC = () => {
       if (next.route === 'order-details') setSelectedOrderId(next.id ?? null);
       if (next.route === 'planned-trip') setPlannedTripId(next.id ?? null);
       if (next.route === 'loading-shortfall') setShortfallTripId(next.id ?? null);
+      if(next.route==='cant-deliver-review')setCantDeliverId(next.id??null);
       if (next.route === 'live-trip-detail' || next.route === 'live-trip-map') setSelectedTrackingTripId(next.id ?? '');
     };
     window.addEventListener('popstate', onPopState);
@@ -124,6 +128,7 @@ export const App: React.FC = () => {
       const id = target.slice('loading-shortfall/'.length); setShortfallTripId(id);
       return navigate('loading-shortfall', `/dispatcher/planning/trips/${encodeURIComponent(id)}/loading-shortfall`);
     }
+    if(target.startsWith('cant-deliver/')){const id=target.slice('cant-deliver/'.length);setCantDeliverId(id);return navigate('cant-deliver-review',`/dispatcher/delivery/cant-deliver/${encodeURIComponent(id)}`);}
     if (target.startsWith('live-trip-detail/')) {
       const id = target.slice('live-trip-detail/'.length); setSelectedTrackingTripId(id);
       return navigate('live-trip-detail', `/dispatcher/tracking/${encodeURIComponent(id)}`);
@@ -164,6 +169,7 @@ export const App: React.FC = () => {
       case 'planning': return <RoutePlanningPage onNavigateGlobal={handleGlobalNavigate} selectedOrders={planningSelectedOrders} />;
       case 'planned-trip': return <PlannedTripDetailPage tripId={plannedTripId ?? ''} onNavigateGlobal={handleGlobalNavigate} />;
       case 'loading-shortfall': return <LoadingShortfallReviewPage tripId={shortfallTripId ?? ''} onNavigateGlobal={handleGlobalNavigate} />;
+      case 'cant-deliver-review': return <CantDeliverReviewPage deferralId={cantDeliverId??''} onNavigateGlobal={handleGlobalNavigate}/>;
       case 'capacity-shortfall': return <CapacityShortfallPage onNavigateGlobal={handleGlobalNavigate} onBackToPlanning={() => navigate('planning', dispatcherPaths.planning!)} />;
       case 'deferred-orders': return <DeferredOrdersPage onNavigateGlobal={handleGlobalNavigate} onPlanOrders={handlePlanOrders} />;
       case 'live-tracking': return <LiveTrackingPage onNavigateGlobal={handleGlobalNavigate} selectedTripId={selectedTrackingTripId} onSelectTrip={setSelectedTrackingTripId} />;

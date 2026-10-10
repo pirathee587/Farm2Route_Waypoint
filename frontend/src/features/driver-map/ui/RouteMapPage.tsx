@@ -25,6 +25,7 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
     isOfflineCache,
     isFallbackSource,
     driverLocation,
+    isRoutePreview,
     locationPermissionDenied,
     routeUpdatedToast,
     refetch,
@@ -90,11 +91,8 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
   }, []);
 
   const currentTripNumber = routeData?.trip_number ?? 1;
-  const currentVehicleId = routeData?.vehicle_id ?? 'VEH014';
-  const tripTabs = routeData?.trip_tabs || [
-    { trip_number: 1, label: 'Trip 1' },
-    { trip_number: 2, label: 'Trip 2' },
-  ];
+  const currentVehicleId = routeData?.vehicle_id ?? 'Unassigned';
+  const tripTabs = routeData?.trip_tabs || [];
 
   return (
     <div
@@ -156,6 +154,11 @@ export const RouteMapPage: React.FC<RouteMapPageProps> = ({
         >
           <RefreshCw size={15} className="animate-spin" />
           <span>{routeUpdatedToast}</span>
+        </div>
+      )}
+      {isRoutePreview && (
+        <div style={{position:'absolute',top:isFullScreen?18:72,right:16,zIndex:50,background:'#fef3c7',color:'#92400e',padding:'6px 10px',borderRadius:999,fontSize:11,fontWeight:800,boxShadow:'0 3px 10px rgba(0,0,0,.12)'}}>
+          ROAD ROUTE PREVIEW · enable GPS for live location
         </div>
       )}
 

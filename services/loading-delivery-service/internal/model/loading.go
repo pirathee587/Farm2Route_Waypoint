@@ -176,6 +176,7 @@ type PlanChangeResponse struct {
 // TripItemDTO matches the JSON contract expected by the Loader frontend
 type TripItemDTO struct {
 	TripID      string  `json:"tripId"`
+	TripCode    string  `json:"tripCode"`
 	VehicleID   string  `json:"vehicleId"`
 	Status      string  `json:"status"` // "Loading" | "Ready" | "Not Started" | "Issue"
 	ProgressPct int     `json:"progressPct"`
@@ -364,8 +365,8 @@ func ComputeLoadPct(loadedKg, capacityKg float64) int {
 // DeriveLoadingStatus calculates the UI status:
 // - "Ready" when ready_at is set, even if the manifest contains an issue
 // - "Issue" before ready_at when an open issue exists
-// - "Ready" when confirmationStatus is LOADED or DEPARTED
-// - "Loading" if confirmationStatus is LOADING or progressPct > 0
+// - "Ready" when confirmationStatus is LOADED/DEPARTED or every checklist line is reviewed
+// - "Loading" only when actual checklist progress is between 1% and 99%
 // - "Not Started" otherwise
 func DeriveLoadingStatus(hasOpenIssues bool, confirmationStatus string, hasReadyAt bool, progressPct int) string {
 	if hasReadyAt {
@@ -374,10 +375,10 @@ func DeriveLoadingStatus(hasOpenIssues bool, confirmationStatus string, hasReady
 	if hasOpenIssues {
 		return DerivedStatusIssue
 	}
-	if confirmationStatus == LoadingStatusLoaded || confirmationStatus == LoadingStatusDeparted {
+	if confirmationStatus == LoadingStatusLoaded || confirmationStatus == LoadingStatusDeparted || progressPct >= 100 {
 		return DerivedStatusReady
 	}
-	if confirmationStatus == LoadingStatusLoading || progressPct > 0 {
+	if progressPct > 0 {
 		return DerivedStatusLoading
 	}
 	return DerivedStatusNotStarted

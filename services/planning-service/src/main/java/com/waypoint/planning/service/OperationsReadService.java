@@ -12,26 +12,27 @@ public class OperationsReadService {
 
     public List<Map<String,Object>> fleet(LocalDate date){
         return jdbc.query("""
-            SELECT v.vehicle_id,v.registration,v.type::text vehicle_type,v.temp_capability::text temp_capability,
+            SELECT v.vehicle_id,COALESCE(v.display_name,v.registration,v.vehicle_id) vehicle_name,v.registration,v.type::text vehicle_type,v.temp_capability::text temp_capability,
                    v.weight_cap_kg::double precision weight_cap_kg,v.volume_cap_m3::double precision volume_cap_m3,
-                   v.depot,v.driver_id::text,COALESCE(s.available,true) available,
+                   v.depot,v.driver_id::text,COALESCE(dp."FullName",'Unassigned') driver_name,COALESCE(s.available,true) available,
                    COALESCE(s.weekly_fuel_quota_l,v.weekly_fuel_quota_l,0)::double precision fuel_quota,
                    COALESCE(s.weekly_fuel_used_l,0)::double precision fuel_used,
                    COUNT(t.trip_id) FILTER (WHERE t.status::text<>'CANCELLED')::int trips_today,
                    BOOL_OR(t.status::text IN ('LOADING','IN_PROGRESS')) in_use
             FROM public.vehicles v
             LEFT JOIN public.vehicle_planning_state s ON s.vehicle_id=v.vehicle_id
+            LEFT JOIN auth_schema.driver_profiles dp ON dp."UserId"=v.driver_id
             LEFT JOIN public.trips t ON t.vehicle_id=v.vehicle_id AND t.delivery_date=?
             WHERE v.is_active=true
             GROUP BY v.vehicle_id,v.registration,v.type,v.temp_capability,v.weight_cap_kg,v.volume_cap_m3,
-                     v.depot,v.driver_id,s.available,s.weekly_fuel_quota_l,v.weekly_fuel_quota_l,s.weekly_fuel_used_l
+                     v.depot,v.driver_id,v.display_name,dp."FullName",s.available,s.weekly_fuel_quota_l,v.weekly_fuel_quota_l,s.weekly_fuel_used_l
             ORDER BY v.vehicle_id
             """,(rs,n)->{
                 Map<String,Object> row=new LinkedHashMap<>();
-                row.put("id",rs.getString("vehicle_id"));row.put("registration",rs.getString("registration"));
+                row.put("id",rs.getString("vehicle_id"));row.put("vehicleName",rs.getString("vehicle_name"));row.put("registration",rs.getString("registration"));
                 row.put("vehicleType",rs.getString("vehicle_type"));row.put("tempCapability",rs.getString("temp_capability"));
                 row.put("weightCapacityKg",rs.getDouble("weight_cap_kg"));row.put("volumeCapacityM3",rs.getDouble("volume_cap_m3"));
-                row.put("depot",rs.getString("depot"));row.put("driverId",rs.getString("driver_id"));
+                row.put("depot",rs.getString("depot"));row.put("driverId",rs.getString("driver_id"));row.put("driverName",rs.getString("driver_name"));
                 row.put("available",rs.getBoolean("available"));row.put("inUse",rs.getBoolean("in_use"));
                 row.put("tripsToday",rs.getInt("trips_today"));row.put("fuelQuota",rs.getDouble("fuel_quota"));row.put("fuelUsed",rs.getDouble("fuel_used"));
                 return row;
@@ -42,23 +43,27 @@ public class OperationsReadService {
         var trips=jdbc.query("""
             SELECT t.trip_id,t.trip_code,t.status::text status,t.vehicle_id,t.trip_number,t.home_depot,
                    COALESCE(t.destination_area,'') destination_area,t.total_weight_kg::double precision total_weight,
-                   t.total_volume_m3::double precision total_volume,t.departed_at,t.completed_at,
+                   t.total_volume_m3::double precision total_volume,t.ready_at,t.departed_at,t.completed_at,
                    v.registration,v.type::text vehicle_type,v.temp_capability::text temp_capability,
                    v.weight_cap_kg::double precision weight_cap,v.volume_cap_m3::double precision volume_cap,
-                   v.driver_id::text driver_id
+                   t.driver_id::text driver_id,COALESCE(dp."FullName",up.full_name,'Unassigned') driver_name
             FROM public.trips t JOIN public.vehicles v ON v.vehicle_id=t.vehicle_id
+            LEFT JOIN auth_schema.driver_profiles dp ON dp."UserId"=t.driver_id
+            LEFT JOIN public.user_profiles up ON up.id=t.driver_id
             WHERE t.delivery_date=? AND t.status::text IN ('CONFIRMED','READY_FOR_LOADING','PLANNED','LOADING','IN_PROGRESS','COMPLETED')
             ORDER BY t.trip_number,t.trip_code
             """,(rs,n)->{
                 Map<String,Object> row=new LinkedHashMap<>();UUID id=rs.getObject("trip_id",UUID.class);
-                row.put("tripId",id);row.put("tripCode",Optional.ofNullable(rs.getString("trip_code")).orElse(id.toString().substring(0,8)));
+                String code=rs.getString("trip_code");
+                if(code==null || code.matches("[0-9a-fA-F]{8}")) code=String.format("TRIP-%s-%s",date.toString().replace("-",""),rs.getString("vehicle_id"));
+                row.put("tripId",id);row.put("tripCode",code);
                 row.put("status",rs.getString("status"));row.put("vehicleId",rs.getString("vehicle_id"));row.put("tripNumber",rs.getInt("trip_number"));
                 row.put("homeDepot",rs.getString("home_depot"));row.put("destination",rs.getString("destination_area"));
                 row.put("weightKg",rs.getDouble("total_weight"));row.put("volumeM3",rs.getDouble("total_volume"));
-                row.put("departedAt",rs.getObject("departed_at"));row.put("completedAt",rs.getObject("completed_at"));
+                row.put("readyAt",rs.getObject("ready_at"));row.put("departedAt",rs.getObject("departed_at"));row.put("completedAt",rs.getObject("completed_at"));
                 row.put("registration",rs.getString("registration"));row.put("vehicleType",rs.getString("vehicle_type"));
                 row.put("tempCapability",rs.getString("temp_capability"));row.put("maxWeightKg",rs.getDouble("weight_cap"));row.put("maxVolumeM3",rs.getDouble("volume_cap"));
-                row.put("driverId",rs.getString("driver_id"));row.put("stops",stops(id));return row;
+                row.put("driverId",rs.getString("driver_id"));row.put("driverName",rs.getString("driver_name"));row.put("stops",stops(id));return row;
             },date);
         return trips;
     }
@@ -79,16 +84,19 @@ public class OperationsReadService {
     private List<Map<String,Object>> stops(UUID tripId){
         return jdbc.query("""
             SELECT s.trip_stop_id,s.stop_sequence,s.order_id,s.outlet_id,x.name outlet_name,x.district,
+                   x.lat::double precision lat,x.lng::double precision lng,
                    s.planned_arrival,s.delivery_window_start,s.delivery_window_end,
-                   COALESCE(d.outcome::text,'PENDING') delivery_status,
+                   COALESCE(ls.delivery_status,ls.arrival_status,d.outcome::text,'PENDING') delivery_status,
                    COALESCE(o.temp_requirement::text,CASE WHEN o.order_type::text='chilled' THEN 'CHILLED' ELSE 'AMBIENT' END) temp_requirement
             FROM public.trip_stops s JOIN public.outlets x ON x.outlet_id=s.outlet_id
             LEFT JOIN public.orders o ON o.id=s.order_id
             LEFT JOIN public.delivery_records d ON d.trip_id=s.trip_id AND d.outlet_id=s.outlet_id
+            LEFT JOIN public.load_stops ls ON ls.trip_id=s.trip_id AND ls.outlet_id=s.outlet_id AND ls.removed_from_plan=FALSE
             WHERE s.trip_id=? ORDER BY s.stop_sequence
             """,(rs,n)->{
                 Map<String,Object> row=new LinkedHashMap<>();row.put("id",rs.getObject("trip_stop_id"));row.put("sequence",rs.getInt("stop_sequence"));
                 row.put("orderId",rs.getObject("order_id"));row.put("outletId",rs.getString("outlet_id"));row.put("name",rs.getString("outlet_name"));row.put("district",rs.getString("district"));
+                row.put("lat",rs.getObject("lat"));row.put("lng",rs.getObject("lng"));
                 row.put("plannedArrival",rs.getObject("planned_arrival"));row.put("windowOpen",rs.getObject("delivery_window_start"));row.put("windowClose",rs.getObject("delivery_window_end"));
                 row.put("status",rs.getString("delivery_status"));row.put("temperature",rs.getString("temp_requirement"));return row;
             },tripId);

@@ -128,9 +128,14 @@ func TestDeriveLoadingStatusRules(t *testing.T) {
 		assert.Equal(t, model.DerivedStatusReady, status)
 	})
 
-	t.Run("100% progress without LOADED/ready_at remains Loading", func(t *testing.T) {
+	t.Run("100% progress is Ready when every checklist line is reviewed", func(t *testing.T) {
 		status := model.DeriveLoadingStatus(false, model.LoadingStatusLoading, false, 100)
-		assert.Equal(t, model.DerivedStatusLoading, status)
+		assert.Equal(t, model.DerivedStatusReady, status)
+	})
+
+	t.Run("0% progress stays Not Started even if confirmation says LOADING", func(t *testing.T) {
+		status := model.DeriveLoadingStatus(false, model.LoadingStatusLoading, false, 0)
+		assert.Equal(t, model.DerivedStatusNotStarted, status)
 	})
 
 	t.Run("Status Loading when progress > 0", func(t *testing.T) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { installDriverAutoSync } from '../driverDeliveryApi';
+import { driverDeliveryApi, installDriverAutoSync } from '../driverDeliveryApi';
 import { DriverView, BottomTab } from '../types';
 import { DriverHomeView } from './DriverHomeView';
 import { StopDetailsView } from './StopDetailsView';
@@ -23,6 +23,8 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
   const [activeTab, setActiveTab] = useState<BottomTab>('today');
   const [deviceFrameMode, setDeviceFrameMode] = useState<boolean>(true);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [arrivalBusy, setArrivalBusy] = useState(false);
 
   useEffect(() => installDriverAutoSync(), []);
 
@@ -279,6 +281,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
           <DriverHomeView
             currentUser={currentUser}
             onSelectStop={(stopId) => {
+              setSelectedStopId(stopId);
               setCurrentView('stop-details');
               setActiveTab('today');
             }}
@@ -294,10 +297,32 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
 
         {currentView === 'stop-details' && (
           <StopDetailsView
+            stopId={selectedStopId || undefined}
             onBack={() => setCurrentView('home')}
             onOpenCantDeliver={() => setCurrentView('cant-deliver')}
             onEnterWaitingWindow={() => setCurrentView('waiting-window')}
-            onArrived={() => setCurrentView('proof-of-delivery')}
+            onArrived={async () => {
+              if (!selectedStopId || arrivalBusy) return;
+              setArrivalBusy(true);
+              try {
+                const position = await new Promise<GeolocationPosition | null>((resolve) => {
+                  if (!navigator.geolocation) { resolve(null); return; }
+                  navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 5000 });
+                });
+                const result = await driverDeliveryApi.arriveStop(selectedStopId, position?.coords.latitude, position?.coords.longitude);
+                if (result.status === 'WAITING_FOR_WINDOW') {
+                  setCurrentView('waiting-window');
+                } else {
+                  showToast('Arrival recorded successfully.');
+                  setCurrentView('home');
+                  setActiveTab('today');
+                }
+              } catch (error) {
+                showToast(error instanceof Error ? error.message : 'Unable to record arrival.');
+              } finally {
+                setArrivalBusy(false);
+              }
+            }}
             onCompleteDelivery={() => {
               showToast('Delivery completed & POD recorded!');
               setCurrentView('home');
@@ -308,6 +333,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
 
         {currentView === 'proof-of-delivery' && (
           <ProofOfDeliveryView
+            stopId={selectedStopId || undefined}
             onBack={() => setCurrentView('stop-details')}
             onConfirmDelivery={() => {
               showToast('Delivery completed & POD recorded!');
@@ -329,6 +355,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
 
         {currentView === 'waiting-window' && (
           <WaitingWindowView
+            stopId={selectedStopId || undefined}
             onBack={() => setCurrentView('stop-details')}
             onOpenCantDeliver={() => setCurrentView('cant-deliver')}
           />
@@ -336,6 +363,7 @@ export const DriverPortal: React.FC<DriverPortalProps> = ({ onLogout, currentUse
 
         {currentView === 'cant-deliver' && (
           <CantDeliverView
+            stopId={selectedStopId || undefined}
             onBack={() => setCurrentView('waiting-window')}
             onSubmitReport={handleReportIssue}
           />

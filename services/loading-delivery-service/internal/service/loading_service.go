@@ -99,6 +99,7 @@ func (s *LoadingService) GetTodayLoads(ctx context.Context, filter model.TripsFi
 
 		allProcessedTrips = append(allProcessedTrips, model.TripItemDTO{
 			TripID:      raw.TripID.String(),
+			TripCode:    raw.TripCode,
 			VehicleID:   raw.VehicleID,
 			Status:      derivedStatus,
 			ProgressPct: progressPct,
@@ -213,6 +214,10 @@ func (s *LoadingService) GetTodayLoads(ctx context.Context, filter model.TripsFi
 	}
 
 	return resp, nil
+}
+
+func (s *LoadingService) ListCantDeliverReviews(ctx context.Context, date string) ([]model.CantDeliverReview, error) {
+	return s.loaderRepo.ListCantDeliverReviews(ctx, date)
 }
 
 func depotDisplayName(scope string, trips []repository.RawTripRecord) string {

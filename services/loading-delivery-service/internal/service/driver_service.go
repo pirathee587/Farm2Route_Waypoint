@@ -388,7 +388,7 @@ func (s *DriverService) DispatcherContact(ctx context.Context, id uuid.UUID) (mo
 }
 
 func buildDriverTrip(rec model.DriverTripRecord, raw []model.DriverStopRecord) model.DriverTrip {
-	t := model.DriverTrip{ID: rec.ID, TripNumber: rec.TripNumber, Status: rec.Status, ReadyAt: rec.ReadyAt, Startable: rec.ReadyAt != nil, Stops: make([]model.DriverStop, 0, len(raw))}
+	t := model.DriverTrip{ID: rec.ID, TripCode: rec.TripCode, TripNumber: rec.TripNumber, Status: rec.Status, ReadyAt: rec.ReadyAt, Startable: rec.ReadyAt != nil, Stops: make([]model.DriverStop, 0, len(raw))}
 	inProgressSet := false
 	for _, r := range raw {
 		status := "PENDING"

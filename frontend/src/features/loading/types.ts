@@ -2,6 +2,7 @@ export type TripStatus = 'Loading' | 'Ready' | 'Not Started' | 'Issue';
 
 export interface Trip {
   id: string;
+  tripCode: string;
   vehicleId: string;
   weightLoaded: number;
   weightCapacity: number;
@@ -29,7 +30,7 @@ export interface SummaryMetricItem {
   iconType: 'truck' | 'check' | 'progress' | 'pending';
 }
 
-export interface TodayLoadsResponse { meta:{shift:string;shiftStart:string;shiftEnd:string;depot:string;date:string}; summary:{tripsToday:number;addedThisShift:number;loaded:number;inProgress:number;pending:number;issuesNeedReview:number}; trips:Array<{tripId:string;vehicleId:string;status:TripStatus;progressPct:number;loadedKg:number;capacityKg:number;origin:string;destination:string;stopCount:number;dock:string;driverName:string}> }
+export interface TodayLoadsResponse { meta:{shift:string;shiftStart:string;shiftEnd:string;depot:string;date:string}; summary:{tripsToday:number;addedThisShift:number;loaded:number;inProgress:number;pending:number;issuesNeedReview:number}; trips:Array<{tripId:string;tripCode:string;vehicleId:string;status:TripStatus;progressPct:number;loadedKg:number;capacityKg:number;origin:string;destination:string;stopCount:number;dock:string;driverName:string}> }
 export interface FilterOptions { docks:string[];statuses:string[] }
 export interface LoadStop { stopId:string;loadOrder:number;stopNo:number;dropLabel:string|null;outlet:string;area:string;dockNote:string;itemsRemaining:number;lineItems:number;units:number;crates:number;weightKg:number;tags:string[];status:string;nextAction:string;changeFlag?:string|null }
 export interface TripDetail { header:{tripCode:string;origin:string;destination:string;status:string};vehicle:{vehicleId:string;capacityKg:number;loadedKg:number;loadPct:number;reeferZone?:{targetTempC:number;currentTempC:number;status:string}|null};driver:{name:string};dock:string;plannedStart:string;shift:string;totals:{stops:number;lineItems:number;itemsChecked:number;itemsTotal:number;exceptions:number};planBanner?:any;stops:LoadStop[] }

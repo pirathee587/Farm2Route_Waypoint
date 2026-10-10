@@ -9,10 +9,10 @@ import { SummaryCard } from './SummaryCard';
 import { PlanningAttentionSection } from './PlanningAttentionSection';
 import { ActiveTripsSection } from './ActiveTripsSection';
 import {
-  LiveOperationsPanel,
   FleetAvailabilityPanel,
   TodaysPlanningPanel,
 } from './RightPanelSections';
+import { DashboardLiveOperationsPanel } from './DashboardLiveOperationsPanel';
 import { RecentActivitySection } from './RecentActivitySection';
 import { fetchDashboardData, emptyDashboardData } from '@/features/planning-allocation/dashboardApi';
 import type { DashboardData } from '@/entities/dashboard/dashboardTypes';
@@ -114,6 +114,14 @@ export const DispatcherDashboardPage: React.FC<DispatcherDashboardPageProps> = (
   };
 
   const handleAttentionAction = (target: string) => {
+    if (target.startsWith('loading-shortfall/')) {
+      onNavigateGlobal?.(target);
+      return;
+    }
+    if (target.startsWith('cant-deliver/')) {
+      onNavigateGlobal?.(target);
+      return;
+    }
     const pageMap: Record<string, DispatcherPage> = {
       orders: 'orders',
       fleet: 'fleet',
@@ -267,7 +275,7 @@ export const DispatcherDashboardPage: React.FC<DispatcherDashboardPageProps> = (
 
           {/* ── RIGHT COLUMN ────────────────────────── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            <LiveOperationsPanel />
+            <DashboardLiveOperationsPanel />
             <FleetAvailabilityPanel summary={summary} />
             <TodaysPlanningPanel
               summary={summary}

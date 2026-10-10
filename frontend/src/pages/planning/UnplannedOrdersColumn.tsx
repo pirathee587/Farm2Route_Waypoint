@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { QueueOrder } from '@/entities/order/orderTypes';
 import { Search, SlidersHorizontal, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { orderReference } from '@/shared/utils/displayReferences';
 
 interface UnplannedOrdersColumnProps {
   orders: QueueOrder[];
@@ -168,7 +169,7 @@ export const UnplannedOrdersColumn: React.FC<UnplannedOrdersColumnProps> = ({ or
                 
                 {/* Order ID & Brand / Status Badge */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.01em' }}>{order.id}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.01em' }}>{order.reference || orderReference(order.id)}</span>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     {isDeferred && (
                       <span style={{ fontSize: '10px', fontWeight: 700, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '2px 8px', borderRadius: '12px', textTransform: 'uppercase' }}>

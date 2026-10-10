@@ -8,7 +8,7 @@ UPDATE public.user_profiles SET depot='Peliyagoda' WHERE id='11111111-1111-1111-
 INSERT INTO public.outlets(outlet_id,name,district,depot,parking_type,address)
 VALUES('OUT-KANDY-01','Kandy City Store','Kandy District','Kandy','STANDARD','Kandy') ON CONFLICT(outlet_id) DO NOTHING;
 INSERT INTO public.vehicles(vehicle_id,registration,type,weight_cap_kg,volume_cap_m3,temp_capability,depot,brand,driver_id)
-VALUES('KDY-301','CP-3010','TRUCK',4200,18,'AMBIENT','Kandy','Fresh','22222222-2222-2222-2222-222222222203') ON CONFLICT(vehicle_id) DO NOTHING;
+VALUES('KDY-301','CP-3010','truck',4200,18,'AMBIENT','Kandy','Fresh','22222222-2222-2222-2222-222222222203') ON CONFLICT(vehicle_id) DO NOTHING;
 INSERT INTO public.trips(trip_id,vehicle_id,driver_id,trip_number,delivery_date,status,stop_sequence,total_weight_kg,total_volume_m3,destination_area)
 VALUES('30100000-0000-0000-0000-000000000301','KDY-301','22222222-2222-2222-2222-222222222203',1,CURRENT_DATE,'PLANNED',ARRAY['OUT-KANDY-01'],600,3,'Kandy City') ON CONFLICT(trip_id) DO NOTHING;
 INSERT INTO public.loading_confirmations(trip_id,loader_id,status,dock,plan_revision,version)

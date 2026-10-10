@@ -7,6 +7,7 @@ export type VehicleType = 'Reefer' | 'Dry Box' | 'Van';
 
 export interface FleetVehicle {
   id: string;             // e.g. 'VEH014'
+  vehicleName: string;
   registration: string;  // e.g. 'WP-CAB-4421'
   type: VehicleType;
   typeFull: string;       // e.g. 'Refrigerated Truck'

@@ -1,0 +1,219 @@
+name: farm2route
+
+x-app-env: &app-env
+  SUPABASE_DB_HOST: postgres
+  SUPABASE_DB_PORT: "5432"
+  SUPABASE_DB_NAME: ${POSTGRES_DB:-waypoint}
+  SUPABASE_DB_USER: ${POSTGRES_USER:-waypoint}
+  SUPABASE_DB_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-waypoint}:${POSTGRES_PASSWORD:-waypoint_local}@postgres:5432/${POSTGRES_DB:-waypoint}?sslmode=disable
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: ${RABBITMQ_USER:-waypoint}
+  RABBITMQ_USERNAME: ${RABBITMQ_USER:-waypoint}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-waypoint_local}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-waypoint}:${RABBITMQ_PASSWORD:-waypoint_local}@rabbitmq:5672/waypoint
+  JWT_SECRET: ${JWT_SECRET:-local-development-key-change-before-deployment-123456}
+  JWT_ISSUER: ${JWT_ISSUER:-waypoint-auth}
+  JWT_AUDIENCE: ${JWT_AUDIENCE:-waypoint-clients}
+  SUPABASE_URL: ${SUPABASE_URL:-}
+  SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+  SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-waypoint}
+      POSTGRES_USER: ${POSTGRES_USER:-waypoint}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./supabase/test_bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
+      - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./infra/postgres/01-apply-migrations.sh:/docker-entrypoint-initdb.d/01-apply-migrations.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [farm2route]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-waypoint}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-waypoint_local}
+      RABBITMQ_DEFAULT_VHOST: waypoint
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [farm2route]
+
+  auth-service:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-auth:${IMAGE_TAG:-latest}
+    build: ./services/auth-service
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+      DB_SSL_MODE: Disable
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [farm2route]
+
+  planning-service:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-planning:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/planning-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}?sslmode=disable
+      DB_USERNAME: ${POSTGRES_USER:-waypoint}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local}
+      ORDER_SERVICE_GRPC_HOST: order-service
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+    networks: [farm2route]
+
+  order-service:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-order:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}?sslmode=disable
+      PLANNING_SERVICE_GRPC_HOST: planning-service
+      SEED_DATA_PATH: /app/data
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+    networks: [farm2route]
+
+  loading-delivery-service:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-loading-delivery:${IMAGE_TAG:-latest}
+    build: ./services/loading-delivery-service
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      PLANNING_GRPC_HOST: planning-service
+      PLANNING_GRPC_PORT: "9090"
+      STORAGE_MODE: ${STORAGE_MODE:-local}
+      UPLOAD_DIR: /uploads
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+    volumes:
+      - loading_uploads:/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      planning-service: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/server", "-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [farm2route]
+
+  notification-service:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-notification:${IMAGE_TAG:-latest}
+    build: ./services/notification-service
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/server", "-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [farm2route]
+
+  api-gateway:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-gateway:${IMAGE_TAG:-latest}
+    build: ./services/api-gateway
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+      Jwt__Secret: ${JWT_SECRET:-local-development-key-change-before-deployment-123456}
+      Jwt__Issuer: ${JWT_ISSUER:-waypoint-auth}
+      Jwt__Audience: ${JWT_AUDIENCE:-waypoint-clients}
+      Cors__AllowedOrigins__0: http://localhost:${FRONTEND_PORT:-3000}
+    depends_on:
+      auth-service: { condition: service_healthy }
+      order-service: { condition: service_healthy }
+      planning-service: { condition: service_healthy }
+      loading-delivery-service: { condition: service_healthy }
+      notification-service: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [farm2route]
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME:-local}/farm2route-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:8080"
+    depends_on:
+      api-gateway: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [farm2route]
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  loading_uploads:
+
+networks:
+  farm2route:
+    driver: bridge

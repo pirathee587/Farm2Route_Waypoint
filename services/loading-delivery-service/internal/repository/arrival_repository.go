@@ -72,6 +72,10 @@ func (r *DriverRepository) Arrive(ctx context.Context, driverID, stopID, actionI
 	if err != nil {
 		return model.ArrivalRecord{}, fmt.Errorf("save arrival: %w", err)
 	}
+	_, err = tx.Exec(ctx, `INSERT INTO public.delivery_tracking(order_id,status,is_delayed,source_note,updated_at)
+		SELECT DISTINCT li.order_id,'out_for_delivery',FALSE,'Driver arrived at '||ls.outlet_name,$2
+		FROM public.load_items li JOIN public.load_stops ls ON ls.stop_id=li.stop_id WHERE li.stop_id=$1 AND li.order_id IS NOT NULL`, stopID, serverTime)
+	if err != nil { return model.ArrivalRecord{}, fmt.Errorf("update store tracking after arrival: %w", err) }
 	if err = tx.Commit(ctx); err != nil {
 		return model.ArrivalRecord{}, err
 	}

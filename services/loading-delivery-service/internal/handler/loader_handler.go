@@ -89,6 +89,19 @@ func (h *LoaderHandler) GetTodayLoads(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+func (h *LoaderHandler) GetCantDeliverReviews(w http.ResponseWriter, r *http.Request) {
+	user, ok := middleware.GetUserFromContext(r.Context())
+	if !ok || (user.Role != "DISPATCHER" && user.Role != "ADMIN") {
+		model.ErrForbidden("Only dispatchers can review can't-deliver reports").WriteJSON(w)
+		return
+	}
+	items, err := h.loadingService.ListCantDeliverReviews(r.Context(), strings.TrimSpace(r.URL.Query().Get("date")))
+	if err != nil { model.ErrInternal("Failed to retrieve can't-deliver reports: " + err.Error()).WriteJSON(w); return }
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(items)
+}
+
 // UpdateRouteOrder handles PUT /api/loading/trips/{tripId}/route-order.
 func (h *LoaderHandler) UpdateRouteOrder(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetUserFromContext(r.Context())

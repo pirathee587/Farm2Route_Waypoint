@@ -19,7 +19,11 @@ export const LoadingShortfallReviewPage: React.FC<Props> = ({ tripId, issueId, o
     Promise.all([loadingApi.trip(tripId), loadingApi.shortfalls(tripId)]).then(([loadedTrip, issues]) => {
       if (!active) return;
       setTrip(loadedTrip);
-      setShortfall(issues.find(issue => !issueId || issue.issueId === issueId) ?? null);
+      setShortfall(
+        issues.find(issue => issueId ? issue.issueId === issueId : !issue.resolved)
+          ?? issues.find(issue => !issueId || issue.issueId === issueId)
+          ?? null,
+      );
     }).catch(err => active && setError(err instanceof Error ? err.message : 'Unable to load the shortfall review.'))
       .finally(() => active && setLoading(false));
     return () => { active = false; };

@@ -122,6 +122,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
 
   const handleChangeVehicle = async (vehicle: VehicleCandidate) => {
     if (!draft) return;
+    setActionError(null);
     try { setDraft(await assignTripVehicle(draft,vehicle)); } catch(error){setActionError(error instanceof Error?error.message:'Unable to assign vehicle.');}
   };
 
@@ -132,6 +133,7 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
 
   const handleChangeDriver = async (driver: DriverInfo) => {
     if (!draft || !draft.vehicle) return;
+    setActionError(null);
     try { setDraft(await assignTripDriver(draft, driver)); }
     catch(error){setActionError(error instanceof Error?error.message:'Unable to assign driver.');}
   };
@@ -275,14 +277,12 @@ export const RoutePlanningPage: React.FC<RoutePlanningPageProps> = ({ onNavigate
                 <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{draft.validation?.weightUsageKg.toLocaleString()} / {draft.validation?.weightCapacityKg.toLocaleString()} kg · {draft.validation?.volumeUsageM3.toFixed(1)} / {draft.validation?.volumeCapacityM3.toFixed(1)} m³</div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16A34A', fontSize: '13px', fontWeight: 700 }}>
-                <Check size={16} /> All required constraints currently pass.
-              </div>
+              {draft.validation?.feasible ? <div style={{ display:'flex',alignItems:'center',gap:'8px',color:'#16A34A',fontSize:'13px',fontWeight:700 }}><Check size={16}/> All required constraints currently pass.</div> : <div style={{color:'#B91C1C',fontSize:'13px',fontWeight:700}}>This trip has failed constraints and cannot be confirmed.</div>}
             </div>
 
             <div style={{ padding: '24px 32px', backgroundColor: '#f8fafc', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
               <button onClick={() => setShowConfirmModal(false)} disabled={confirming} style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '13px', fontWeight: 600, color: '#475569', cursor: confirming ? 'not-allowed' : 'pointer', opacity: confirming ? 0.6 : 1 }}>Cancel</button>
-              <button onClick={handleConfirmPlan} disabled={confirming} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', backgroundColor: '#F59E0B', fontSize: '13px', fontWeight: 700, color: '#0f172a', cursor: confirming ? 'wait' : 'pointer', opacity: confirming ? 0.7 : 1 }}>{confirming ? 'Confirming...' : 'Confirm Plan'}</button>
+              <button onClick={handleConfirmPlan} disabled={confirming || !draft.validation?.feasible} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', backgroundColor: draft.validation?.feasible ? '#F59E0B' : '#e2e8f0', fontSize: '13px', fontWeight: 700, color: draft.validation?.feasible ? '#0f172a' : '#94a3b8', cursor: confirming ? 'wait' : draft.validation?.feasible ? 'pointer' : 'not-allowed', opacity: confirming ? 0.7 : 1 }}>{confirming ? 'Confirming...' : 'Confirm Plan'}</button>
             </div>
           </div>
         </div>

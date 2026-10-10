@@ -4,9 +4,9 @@
 
 export type TripMonitoringStatus = 'ON_TIME' | 'AT_RISK' | 'ISSUE';
 
-export type TripState = 'IN_TRANSIT' | 'COMPLETED' | 'PLANNED';
+export type TripState = 'IN_TRANSIT' | 'READY' | 'COMPLETED' | 'PLANNED';
 
-export type StopStatus = 'DEPOT' | 'DELIVERED' | 'NEXT' | 'UPCOMING';
+export type StopStatus = 'DEPOT' | 'DELIVERED' | 'ARRIVED' | 'NOT_DELIVERED' | 'NEXT' | 'UPCOMING';
 
 export interface TripStop {
   id: string;
@@ -18,6 +18,8 @@ export interface TripStop {
   deliveryWindow?: string;
   itemsText?: string;
   locationArea?: string;
+  lat?: number;
+  lng?: number;
   // Visual coordinates for SVG map (percentages 0-100)
   mapCoords?: { x: number; y: number };
 }

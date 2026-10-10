@@ -11,11 +11,11 @@ interface TripValidationColumnProps {
 export const TripValidationColumn: React.FC<TripValidationColumnProps> = ({ draft, onReviewShortfall, onConfirmClick }) => {
   if (!draft || !draft.validation) {
     const hasOrders = Boolean(draft && draft.stops.length > 0);
-    const canConfirmManually = Boolean(hasOrders && draft?.vehicle && onConfirmClick);
+    const canConfirmManually = false;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '620px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '24px' }}>
         <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', margin: '0 0 24px' }}>Trip Confirmation</h2>
-        <div style={{ fontSize: '13px', color: '#64748b' }}>{draft ? (draft.vehicle ? 'This trip can be manually confirmed and dispatched.' : 'Assign a vehicle to continue.') : 'Add orders to create a trip.'}</div>
+        <div style={{ fontSize: '13px', color: '#64748b' }}>{draft ? (draft.vehicle ? 'Validating the selected vehicle and orders…' : 'Assign a vehicle to continue.') : 'Add orders to create a trip.'}</div>
         {hasOrders && <button disabled={!canConfirmManually} onClick={onConfirmClick} style={{ marginTop:'auto',width:'100%',padding:'12px',borderRadius:'8px',backgroundColor:canConfirmManually?'#F59E0B':'#e2e8f0',border:'none',color:canConfirmManually?'#0f172a':'#94a3b8',fontSize:'13px',fontWeight:700,cursor:canConfirmManually?'pointer':'not-allowed' }}>{canConfirmManually?'Confirm and send to loader/driver':'Assign vehicle first'}</button>}
       </div>
     );
@@ -123,11 +123,11 @@ export const TripValidationColumn: React.FC<TripValidationColumnProps> = ({ draf
       {draft.stops.length > 0 && onConfirmClick && (
         <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', backgroundColor: '#fff' }}>
           <button 
-            disabled={!draft.vehicle}
+            disabled={!draft.vehicle || !validation.feasible}
             onClick={onConfirmClick}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: draft.vehicle ? '#F59E0B' : '#e2e8f0', border: 'none', color: draft.vehicle ? '#0f172a' : '#94a3b8', fontSize: '13px', fontWeight: 700, cursor: draft.vehicle ? 'pointer' : 'not-allowed' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: draft.vehicle && validation.feasible ? '#F59E0B' : '#e2e8f0', border: 'none', color: draft.vehicle && validation.feasible ? '#0f172a' : '#94a3b8', fontSize: '13px', fontWeight: 700, cursor: draft.vehicle && validation.feasible ? 'pointer' : 'not-allowed' }}
           >
-            {!draft.vehicle ? 'Assign vehicle first' : 'Confirm trip'}
+            {!draft.vehicle ? 'Assign vehicle first' : validation.feasible ? 'Confirm trip' : 'Resolve failed constraints'}
           </button>
         </div>
       )}

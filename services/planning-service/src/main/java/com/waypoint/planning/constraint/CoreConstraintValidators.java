@@ -56,7 +56,7 @@ final class Checks {
     public String code(){return "TRIP_LIMIT_REACHED";}
     public ConstraintCheck validate(PlanningContext c){
         int assignedTrips=c.existingTrips();
-        String reason="Vehicle "+c.vehicle().vehicleId()+" already has 2 trips assigned for "+c.planningDate()+". Maximum 2 trips per vehicle per day.";
+        String reason="Vehicle "+c.vehicle().vehicleId()+" already has "+assignedTrips+" trips assigned for "+c.planningDate()+". Maximum 2 trips per vehicle per day.";
         return Checks.result(code(),assignedTrips<2,reason,String.valueOf(assignedTrips),"2",null);
     }
 }
