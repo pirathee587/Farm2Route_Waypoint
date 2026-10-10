@@ -1,71 +1,134 @@
-# Waypoint
+# Farm2Route Waypoint
 
-Waypoint is a delivery planning system with a Store Manager portal, service-to-service gRPC contracts, RabbitMQ events, and Supabase PostgreSQL persistence. See [docs/architecture.md](docs/architecture.md) for the full system map.
+Farm2Route Waypoint is a database-backed delivery operations platform for Store Managers, Dispatchers, Loaders, and Drivers. The stack uses React, a .NET API Gateway and Auth service, Java Order and Planning services, Go Loading/Delivery and Notification services, PostgreSQL, RabbitMQ, and Mapbox.
 
-## Implementation Status
+See [docs/architecture.md](docs/architecture.md) for the system map and [DOCKER_SETUP.md](DOCKER_SETUP.md) for detailed Docker and troubleshooting instructions.
 
-| Service | Status |
-|---|---|
-| Auth Service | ✅ Implemented + tested (10/10 tests) |
-| Order Service | ✅ Implemented + tested (15/15 baseline tests) |
-| Planning Service | ✅ Implemented + tested (26/27 tests; PostgreSQL integration requires Docker) |
-| Loading & Delivery | ✅ Implemented (Go tests require local toolchain) |
-| Notification Service | ✅ Implemented |
-| Frontend | ✅ Implemented (18/18 tests) |
+## Languages and technology stack
 
-## Local Stack
+| Language / format | Where it is used | Main technology |
+|---|---|---|
+| TypeScript / TSX | Browser frontend and UI components | React 18, Vite 5, React Router, Mapbox GL |
+| CSS | Responsive Store Manager, Dispatcher, Loader, and Driver interfaces | Native CSS |
+| C# | Authentication and API routing | .NET 8, ASP.NET Core, Entity Framework Core, YARP |
+| Java | Order management, planning, allocation, and validation | Java 21, Spring Boot 3.2, Spring Data JPA, Maven |
+| Go | Loading, delivery, Driver APIs, notifications, and background workers | Go 1.22, pgx, gRPC, RabbitMQ |
+| SQL / PL/pgSQL | Database schema, migrations, seed data, constraints, and database functions | PostgreSQL 16 / Supabase-compatible schema |
+| Protocol Buffers | Typed service-to-service contracts | gRPC / Protobuf 3 |
+| Python | Data-science and allocation research utilities under `ml-datathon` | Python notebooks and modules |
+| YAML | Docker Compose, application configuration, and service settings | Docker Compose and service config |
+| PowerShell / shell scripts | Local setup, verification, and container automation | PowerShell and POSIX shell |
 
-The intended local entry point is NGINX at `https://localhost`; browser API calls go through NGINX and the API Gateway, never directly to Order Service.
+The application is a polyglot microservice system: the frontend is TypeScript, core business services use C#, Java, and Go, and all roles share PostgreSQL as the source of truth.
 
-Before starting a fresh stack:
+## Run locally with Docker
 
-```bash
-cp .env.example .env
-cp services/auth-service/.env.example services/auth-service/.env
-cp services/api-gateway/.env.example services/api-gateway/.env
-cp services/order-service/.env.example services/order-service/.env
-cp services/planning-service/.env.example services/planning-service/.env
-cp services/loading-delivery-service/.env.example services/loading-delivery-service/.env
-cp services/notification-service/.env.example services/notification-service/.env
+Requirements: Docker Desktop with Docker Compose v2.
 
-# Generate local HTTPS certificates as described in nginx/README.md.
-docker compose up --build
+From the repository root:
+
+```powershell
+Copy-Item .env.example .env
+docker compose config
+docker compose up -d --build
+docker compose ps
 ```
 
-The Auth Service seed account is:
+Open the application in Chrome at <http://localhost:3000>. Frontend requests use same-origin `/api` routes through the API Gateway; backend containers are intentionally not exposed to the host.
 
-| Email | Password | Role | Outlet |
-|---|---|---|---|
-| `manager@waypoint.lk` | `Waypoint@2026` | `STORE_MANAGER` | `OUT001` |
+Do not commit `.env`. At minimum, replace the local PostgreSQL password, RabbitMQ password, and JWT secret. Maps require both values below, followed by a rebuild:
 
-Order reference data is loaded from `outlets.csv`, `vehicles.csv`, and `calendar.csv` using [services/order-service/src/main/resources/data/seed.sql](services/order-service/src/main/resources/data/seed.sql). The repository currently does not include the Challenge Booklet CSV files, and Compose does not execute that SQL automatically; provide those files and run the seed script against Supabase before judging data-dependent screens.
+```dotenv
+VITE_MAPBOX_TOKEN=your_public_mapbox_token
+MAPBOX_ACCESS_TOKEN=your_mapbox_access_token
+```
 
-## Judge Walkthrough: Store Manager Portal
+```powershell
+docker compose up -d --build frontend loading-delivery-service
+```
 
-1. **Sign in.** Open `https://localhost`, sign in as `manager@waypoint.lk`, and enter the Store Manager portal at `/store-manager`. The gateway validates the JWT and the frontend route guard requires the `STORE_MANAGER` role.
+## Seeded local accounts
 
-2. **Place an order.** Open `/store-manager/orders/new`. Choose a brand, choose `Dry` or `Chilled` when the brand is `fresh`, select a requested delivery date, add items, and submit. The portal calls `POST /api/orders` through NGINX and the gateway. A successful order starts with status `PENDING`, then navigates to `/store-manager/orders/{id}/confirmed`.
+All seeded accounts use password `Waypoint@2026`.
 
-3. **View the order on the dashboard and history.** Return to `/store-manager`. The dashboard calls `GET /api/orders` and computes the `PENDING`, `ALLOCATED`, `DEFERRED`, and `DELIVERED` cards client-side. Open `/store-manager/orders` to select the order and inspect its Timeline, Items, and Notes tabs.
-
-4. **Review a deferral notice.** When Planning publishes the `order.deferred` event, the order becomes `DEFERRED`. The dashboard alert opens `/store-manager/orders/{id}/deferral`, which calls `GET /api/orders/{id}/deferral`, shows the reason/original/revised dates, and highlights repeat deferrals. Acknowledge the notice to return to `/store-manager`.
-
-5. **Track delivery.** Open `/store-manager/orders/{id}/tracking`. The page calls `GET /api/orders/{id}/tracking` and displays the internal delivery states `allocated`, `loaded`, `out_for_delivery`, and `completed`. The order status remains one of the canonical values from `proto/order.proto`: `PENDING`, `ALLOCATED`, `DEFERRED`, `ATTEMPTED`, or `DELIVERED`; there is no `ARRIVED` status. A delayed tracking row displays the delayed warning variant.
-
-6. **Complete delivery.** Use the implemented Loading & Delivery workflow to record the stop outcome and proof of delivery. Its `delivery.completed` event moves the order to `DELIVERED`. The tracking page then enables **Proceed to Receiving** at `/store-manager/receiving`. No fake `ARRIVED` status is introduced.
-
-7. **Confirm receipt.** On `/store-manager/receiving`, select a `DELIVERED` order, check the received items, enter the recipient, and submit. The portal calls `POST /api/orders/{id}/receipt`. Receipt confirmation is stored separately; the order remains `DELIVERED` because `proto/order.proto` has no `RECEIVED` status.
-
-8. **Report an issue.** From `/store-manager/orders`, open the order detail, select the Notes tab, and choose **Report an issue**. Submit `missing`, `damaged`, `wrong_item`, or `late`, with a description and optional photo URL. The portal calls `POST /api/orders/{id}/issues`, refreshes `GET /api/orders/{id}/issues`, and shows a success toast. Issue reports are REST-only until the team confirms an `issue.reported` event contract.
-
-### Route Summary
-
-| Workflow | Route |
+| Email | Role |
 |---|---|
-| Dashboard | `/store-manager` |
-| New order | `/store-manager/orders/new` |
-| Order confirmed | `/store-manager/orders/{id}/confirmed` |
-| Order history/detail | `/store-manager/orders` |
-| Delivery tracking | `/store-manager/orders/{id}/tracking` |
-| Deferral notice | `/store-manager/orders/{id}/deferral` |
-| Receiving/receipt | `/store-manager/receiving` |
+| `manager@waypoint.lk` | Store Manager (`OUT001`) |
+| `dispatcher@waypoint.lk` | Dispatcher |
+| `loader@waypoint.lk` | Loader |
+| `driver@waypoint.lk` | Driver |
+| `drv014@waypoint.lk` | Driver (`DRV014`) |
+
+## Operational workflow
+
+1. Store Manager places an order. Dispatcher sees the same database order in the Order Queue.
+2. Dispatcher builds a trip and selects a suitable vehicle and driver.
+3. Trip confirmation sends the trip to both Loader and Driver workflows.
+4. Loader records real item progress or a loading shortfall and marks the load ready.
+5. Driver sees the assigned trip, vehicle, stops, notifications, Mapbox road route, and live location when browser GPS permission is available.
+6. `I've Arrived` records arrival without requiring proof files. Dispatcher Live Tracking shows `ARRIVED`, and Store Manager tracking changes to `out_for_delivery`.
+7. `Can't Deliver` records a deferral, creates a Dispatcher review item, marks Live Tracking as `NOT_DELIVERED`/issue, and changes Store Manager tracking to delayed `delivery_attempted` with the reported reason.
+
+Operational data is stored in PostgreSQL. Driver, Loader, Dispatcher, and Store Manager screens do not use frontend demo records for these workflows.
+
+## Fleet and validation
+
+The local active fleet contains 10 database vehicles. Three are intentionally marked operationally unavailable so the Dispatcher can demonstrate a validation failure. The remaining vehicles continue to use the normal rules:
+
+- Maximum 2 trips per vehicle per delivery date
+- Weight and volume capacity
+- Temperature/refrigeration suitability
+- Vehicle and order brand suitability
+- Home depot compatibility
+- Restricted-outlet van access
+- Delivery windows, fuel quota, duplicate allocation, and availability
+
+Inactive historical vehicle rows are retained in PostgreSQL for referential integrity but are excluded from the selectable fleet.
+
+## Main routes
+
+| Role/workflow | Route |
+|---|---|
+| Store Manager dashboard | `/store-manager` |
+| Create order | `/store-manager/orders/new` |
+| Order history/details | `/store-manager/orders` |
+| Store delivery tracking | `/store-manager/orders/{id}/tracking` |
+| Receiving | `/store-manager/receiving` |
+| Dispatcher dashboard | `/dispatcher` |
+| Dispatcher order queue | `/dispatcher/orders` |
+| Route planning | `/dispatcher/planning` |
+| Loading visibility | `/dispatcher/loading` |
+| Live Tracking | `/dispatcher/tracking` |
+
+Driver and Loader portals are selected automatically after login based on the authenticated role.
+
+## Database initialization
+
+On a fresh PostgreSQL volume, Compose applies `supabase/test_bootstrap.sql` and the ordered SQL files in `supabase/migrations`. Application-specific Flyway/EF migrations then apply service-owned additions.
+
+`docker compose down` preserves named volumes. Do not use `docker compose down --volumes` unless you deliberately want to delete the local database, RabbitMQ state, and uploaded files.
+
+## Useful commands
+
+```powershell
+docker compose ps
+docker compose logs --tail=200 loading-delivery-service
+docker compose logs --tail=200 planning-service
+docker compose up -d --build frontend
+docker compose stop
+docker compose down
+```
+
+If the UI looks cached after rebuilding, use `Ctrl + Shift + R` in Chrome.
+
+## Git
+
+Run Git commands from the repository directory, not its parent:
+
+```powershell
+cd C:\Users\DELL\Desktop\Farm2Route\Farm2Route_Waypoint
+git remote -v
+git status
+```
+
+The expected origin is `https://github.com/pirathee587/Farm2Route_Waypoint.git`.
