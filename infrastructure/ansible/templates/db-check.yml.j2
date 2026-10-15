@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ waypoint_db_check_name }}
+  namespace: {{ waypoint_namespace }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 90
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        role: application
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: check
+          image: postgres:16-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          envFrom:
+            - secretRef:
+                name: planning-service-secrets
+          command:
+            - sh
+            - -ec
+            - |
+              export PGHOST="$SUPABASE_DB_HOST" PGPORT="$SUPABASE_DB_PORT"
+              export PGDATABASE="$SUPABASE_DB_NAME" PGUSER="$SUPABASE_DB_USER"
+              export PGPASSWORD="$SUPABASE_DB_PASSWORD" PGCONNECT_TIMEOUT=15
+              export PGSSLMODE=verify-full PGSSLROOTCERT=/etc/db-ca/root.crt
+              psql -X -v ON_ERROR_STOP=1 -c 'SELECT 1 AS tls_verified_connection'
+          volumeMounts:
+            - name: db-ca
+              mountPath: /etc/db-ca
+              readOnly: true
+      volumes:
+        - name: db-ca
+          configMap:
+            name: supabase-db-ca

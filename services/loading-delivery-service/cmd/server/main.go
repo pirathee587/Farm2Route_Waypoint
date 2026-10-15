@@ -74,7 +74,7 @@ func main() {
 				Name:         os.Getenv("SUPABASE_DB_NAME"),
 				User:         os.Getenv("SUPABASE_DB_USER"),
 				Password:     os.Getenv("SUPABASE_DB_PASSWORD"),
-				SSLMode:      "require",
+				SSLMode:      "verify-full",
 				MaxOpenConns: 10,
 				MaxIdleConns: 2,
 			},
@@ -132,7 +132,11 @@ func main() {
 	}
 
 	// ── Service & Handler Initialization ─────────────────────────────────────
-	storageService := service.NewStorageServiceFromEnv()
+	storageService, err := service.StorageServiceFromEnv()
+	if err != nil {
+		logger.Error("Storage initialization failed")
+		os.Exit(1)
+	}
 	planningClient := service.NewPlanningServiceClient(os.Getenv("PLANNING_GRPC_ADDR"), logger)
 	loadingService := service.NewLoadingService(loadingRepo, loaderRepo, planningClient, logger)
 	loadingService.SetAllocationRepository(allocationRepo)
@@ -176,6 +180,9 @@ func main() {
 
 	// ── Routing Setup ────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
+	if local, ok := storageService.(*service.LocalStorageService); ok {
+		mux.Handle("GET /api/loading/uploads/{filename}", middleware.GatewayAuthMiddleware(local))
+	}
 
 	// 1. Public Health Check
 	healthH := handler.NewHealthHandler(pgDB)

@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -57,11 +59,14 @@ func (d DatabaseConfig) DSN() string {
 		d.User = "postgres"
 	}
 	if d.SSLMode == "" {
-		d.SSLMode = "disable"
+		d.SSLMode = "verify-full"
 	}
 
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.Name, d.SSLMode)
+	u := url.URL{Scheme: "postgres", Host: net.JoinHostPort(d.Host, d.Port), Path: "/" + d.Name, User: url.UserPassword(d.User, d.Password)}
+	q := u.Query()
+	q.Set("sslmode", d.SSLMode)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // MaxLifetimeDuration returns duration for connection lifetime

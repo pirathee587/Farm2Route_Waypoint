@@ -32,7 +32,7 @@ public class AuthService : IAuthService
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
         var user = await _userRepository.GetByEmailAsync(request.Email.ToLowerInvariant());
-        if (user == null)
+        if (user == null || DevelopmentAccounts.IsBlocked(user.Email, _configuration))
             throw new UnauthorizedException("Invalid credentials");
 
         if (user.Status != UserStatus.active)
@@ -94,7 +94,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedException("Invalid refresh token");
 
         var user = await _userRepository.GetByIdAsync(storedToken.UserId);
-        if (user == null || user.Status != UserStatus.active)
+        if (user == null || user.Status != UserStatus.active || DevelopmentAccounts.IsBlocked(user.Email, _configuration))
             throw new UnauthorizedException("Invalid user");
 
         await _tokenService.RevokeRefreshTokenAsync(request.RefreshToken);
@@ -128,7 +128,7 @@ public class AuthService : IAuthService
     public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
     {
         var user = await _userRepository.GetByEmailAsync(request.Email.ToLowerInvariant());
-        if (user == null)
+        if (user == null || DevelopmentAccounts.IsBlocked(user.Email, _configuration))
             return; // Success anyway (no user enumeration)
 
         var resetToken = _passwordService.GenerateResetToken();
@@ -156,7 +156,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedException("Invalid or expired reset token");
 
         var user = await _userRepository.GetByIdAsync(tokenEntity.UserId);
-        if (user == null)
+        if (user == null || DevelopmentAccounts.IsBlocked(user.Email, _configuration))
             throw new UnauthorizedException("Invalid user");
 
         user.PasswordHash = _passwordService.HashPassword(request.NewPassword);

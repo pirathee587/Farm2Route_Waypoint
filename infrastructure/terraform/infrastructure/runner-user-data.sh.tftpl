@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+# Update system packages
+dnf update -y
+
+# Install base tools: git, docker, tar, gzip, unzip
+dnf install -y git docker tar gzip unzip shadow-utils
+
+# Enable and start Docker
+systemctl enable --now docker
+
+# Install Amazon Corretto 21 (OpenJDK 21 for Jenkins and Java microservices)
+dnf install -y java-21-amazon-corretto-devel
+
+# Install Jenkins LTS
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+cat << 'EOF' > /etc/yum.repos.d/jenkins.repo
+[jenkins]
+name=Jenkins-stable
+baseurl=http://pkg.jenkins.io/redhat-stable
+gpgcheck=1
+EOF
+dnf install -y jenkins
+
+# Ensure jenkins user exists and is added to docker group
+usermod -aG docker jenkins
+
+# Install kubectl matching EKS minor version
+KUBECTL_MINOR="${kubectl_minor}"
+KUBECTL_VER=$(curl -sSL "https://dl.k8s.io/release/stable-$KUBECTL_MINOR.txt" || echo "v1.35.0")
+curl -sSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/$KUBECTL_VER/bin/linux/amd64/kubectl"
+chmod +x /usr/local/bin/kubectl
+
+# Install Trivy for container vulnerability scanning
+rpm -ivh https://github.com/aquasecurity/trivy/releases/download/v0.58.0/trivy_0.58.0_Linux-64bit.rpm || true
+
+# Start and enable Jenkins
+systemctl enable --now jenkins
+
+echo "Jenkins and runner dependencies installed successfully."

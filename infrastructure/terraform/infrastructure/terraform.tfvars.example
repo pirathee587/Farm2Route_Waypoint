@@ -1,0 +1,12 @@
+# Candidate upgrade: AWS catalog compatibility checked; controller/runtime qualification remains a release gate.
+owner = "REPLACE_OWNER"
+eks_version = "1.35"
+admin_role_arn = "arn:aws:iam::REPLACE_ACCOUNT:role/REPLACE_ADMIN_ROLE"
+jenkins_trusted_role_arn = "arn:aws:iam::REPLACE_ACCOUNT:role/REPLACE_PRIVATE_RUNNER_ROLE"
+addon_versions = {
+ vpc-cni = "v1.23.2-eksbuild.1"
+ kube-proxy = "v1.35.3-eksbuild.49"
+ coredns = "v1.14.7-eksbuild.11"
+ eks-pod-identity-agent = "v1.4.0-eksbuild.3"
+ aws-ebs-csi-driver = "v1.66.0-eksbuild.1"
+}

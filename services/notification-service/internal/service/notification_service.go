@@ -4,12 +4,25 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
+	"github.com/waypoint/notification-service/internal/messaging"
 	"github.com/waypoint/notification-service/internal/model"
-	"github.com/waypoint/notification-service/internal/repository"
 )
+
+// ErrPersistenceUnavailable is returned when no notification store is
+// configured. It is transient: the consumer retries and never acknowledges an
+// event that was not durably recorded.
+var ErrPersistenceUnavailable = errors.New("notification persistence unavailable")
+
+// Store persists notifications idempotently. *repository.NotificationRepository
+// implements this interface.
+type Store interface {
+	CreateForRolesOnce(ctx context.Context, eventKey string, roles []string,
+		eventType, title, body, payloadJSON string) (inserted int, duplicate bool, err error)
+}
 
 // Broadcaster is the interface used by NotificationService to push real-time
 // messages to WebSocket clients.  *handler.Hub implements this interface.
@@ -21,14 +34,15 @@ type Broadcaster interface {
 // NotificationService coordinates persistence and real-time fan-out for all
 // incoming RabbitMQ events.
 type NotificationService struct {
-	repo        *repository.NotificationRepository
+	repo        Store
 	broadcaster Broadcaster
 	logger      *slog.Logger
 }
 
-// NewNotificationService creates a NotificationService.
+// NewNotificationService creates a NotificationService. Pass an untyped nil
+// store (not a typed nil pointer) when persistence is unavailable.
 func NewNotificationService(
-	repo *repository.NotificationRepository,
+	repo Store,
 	broadcaster Broadcaster,
 	logger *slog.Logger,
 ) *NotificationService {
@@ -46,8 +60,13 @@ func NewNotificationService(
 // the target roles and broadcasts a real-time push via the WebSocket hub.
 //
 // eventType must be one of the model.EventType* constants.
+// eventKey is the idempotency key; an already-recorded key is a no-op.
 // payloadJSON is the raw event body (stored as context in the notification record).
-func (s *NotificationService) HandleEvent(ctx context.Context, eventType string, rawPayload []byte) error {
+//
+// A non-nil error means the event was NOT durably recorded and must not be
+// acknowledged. The broadcast happens only after a first-time commit, so
+// retries and redeliveries do not push duplicates.
+func (s *NotificationService) HandleEvent(ctx context.Context, eventType, eventKey string, rawPayload []byte) error {
 	if eventType == model.EventTypeDriverNotification {
 		var push struct {
 			UserID  string          `json:"user_id"`
@@ -57,7 +76,7 @@ func (s *NotificationService) HandleEvent(ctx context.Context, eventType string,
 			Payload json.RawMessage `json:"payload"`
 		}
 		if err := json.Unmarshal(rawPayload, &push); err != nil {
-			return err
+			return messaging.Permanent(fmt.Errorf("decode driver notification: %w", err))
 		}
 		message, _ := json.Marshal(map[string]any{"type": "notification", "eventType": push.Type, "title": push.Title, "body": push.Body, "payload": push.Payload})
 		s.broadcaster.BroadcastToUser(push.UserID, message)
@@ -79,14 +98,17 @@ func (s *NotificationService) HandleEvent(ctx context.Context, eventType string,
 
 	payloadStr := string(rawPayload)
 
-	// 1. Persist to database for all users of the target roles.
-	inserted, err := s.persistForRoles(ctx, targetRoles, eventType, title, body, payloadStr)
+	// 1. Persist to database for all users of the target roles. Failure is
+	// returned so the consumer retries or dead-letters rather than acking.
+	inserted, duplicate, err := s.persistForRoles(ctx, eventKey, targetRoles, eventType, title, body, payloadStr)
 	if err != nil {
-		// Log and continue — real-time push should still happen even if DB is degraded.
-		s.logger.Error("Failed to persist notifications", "event_type", eventType, "error", err)
-	} else {
-		s.logger.Info("Persisted notifications", "event_type", eventType, "count", inserted)
+		return fmt.Errorf("persist %s notifications: %w", eventType, err)
 	}
+	if duplicate {
+		s.logger.Info("Duplicate event ignored", "event_type", eventType, "event_key", eventKey)
+		return nil
+	}
+	s.logger.Info("Persisted notifications", "event_type", eventType, "count", inserted)
 
 	// 2. Real-time broadcast to all connected WebSocket clients of target roles.
 	pushMsg, _ := json.Marshal(map[string]any{
@@ -102,15 +124,16 @@ func (s *NotificationService) HandleEvent(ctx context.Context, eventType string,
 	return nil
 }
 
-// persistForRoles is a thin wrapper that skips DB work when repo is nil (degraded mode).
+// persistForRoles is a thin wrapper that fails when repo is nil (degraded mode)
+// instead of silently reporting success.
 func (s *NotificationService) persistForRoles(
-	ctx context.Context, roles []string,
+	ctx context.Context, eventKey string, roles []string,
 	eventType, title, body, payloadJSON string,
-) (int, error) {
+) (int, bool, error) {
 	if s.repo == nil {
-		return 0, nil
+		return 0, false, ErrPersistenceUnavailable
 	}
-	return s.repo.CreateForRoles(ctx, roles, eventType, title, body, payloadJSON)
+	return s.repo.CreateForRolesOnce(ctx, eventKey, roles, eventType, title, body, payloadJSON)
 }
 
 // buildNotificationText produces human-readable title and body from a raw event payload.

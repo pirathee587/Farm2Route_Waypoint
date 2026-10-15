@@ -1,4 +1,5 @@
 import { authSession } from './authSession';
+import { apiUrl } from '@/shared/api/apiBase';
 
 export interface LoginCredentials {
   email: string;
@@ -39,7 +40,7 @@ const persistSession = (result: LoginResult): LoginResult => {
 export const authApi = {
   async login(credentials: LoginCredentials): Promise<LoginResult> {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -78,7 +79,7 @@ export const authApi = {
 
   async resetPassword(email: string): Promise<ResetPasswordResult> {
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(apiUrl('/auth/reset-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),

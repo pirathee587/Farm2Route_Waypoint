@@ -1,0 +1,116 @@
+---
+- name: Require the namespace used by the shared manifests
+  ansible.builtin.assert:
+    that: waypoint_namespace == 'waypoint-dev'
+    fail_msg: Shared manifests target waypoint-dev; update them together before changing namespace.
+
+- name: Create private configuration directory
+  ansible.builtin.file:
+    path: "{{ waypoint_state_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Read EKS connection configuration without mutating default kubeconfig
+  ansible.builtin.command:
+    argv:
+      - aws
+      - eks
+      - update-kubeconfig
+      - --region
+      - "{{ waypoint_region }}"
+      - --name
+      - "{{ waypoint_cluster }}"
+      - --kubeconfig
+      - "{{ waypoint_kubeconfig }}"
+      - --dry-run
+  register: waypoint_kubeconfig_result
+  changed_when: false
+  check_mode: false
+
+- name: Save dedicated cluster configuration
+  ansible.builtin.copy:
+    content: "{{ waypoint_kubeconfig_result.stdout }}\n"
+    dest: "{{ waypoint_kubeconfig }}"
+    mode: '0600'
+
+- name: Inspect existing cluster configuration for check mode
+  ansible.builtin.stat:
+    path: "{{ waypoint_kubeconfig }}"
+  register: waypoint_kubeconfig_file
+
+- name: Require an existing configuration for read-only cluster checks
+  ansible.builtin.assert:
+    that: waypoint_kubeconfig_file.stat.exists
+    fail_msg: Run cluster.yml once before --check; check mode does not create kubeconfig.
+
+- name: Verify Terraform-managed cluster prerequisites
+  ansible.builtin.command:
+    argv: "{{ ['kubectl', '--kubeconfig', waypoint_kubeconfig] + item }}"
+  changed_when: false
+  check_mode: false
+  loop:
+    - [get, namespace, "{{ waypoint_namespace }}"]
+    - [get, storageclass, waypoint-gp3-retain]
+    - [-n, "{{ waypoint_namespace }}", get, networkpolicy, default-deny, dns, external-dependencies, rabbitmq-clients, rabbitmq-ingress]
+
+- name: Read existing service secrets without displaying their contents
+  ansible.builtin.command:
+    argv: [kubectl, '--kubeconfig', "{{ waypoint_kubeconfig }}", -n, "{{ waypoint_namespace }}", get, secret, "{{ item.key }}", -o, json]
+  loop: "{{ waypoint_required_secret_keys | dict2items }}"
+  register: waypoint_secrets
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Check required secret values are present
+  ansible.builtin.assert:
+    that:
+      - item.item.value | difference((item.stdout | from_json).data.keys() | list) | length == 0
+      - (item.stdout | from_json).data | dict2items | selectattr('key', 'in', item.item.value) | selectattr('value', 'equalto', '') | list | length == 0
+    fail_msg: Required Kubernetes secret keys are missing or empty. Repair the existing secret through its normal provisioning workflow.
+  loop: "{{ waypoint_secrets.results }}"
+  no_log: true
+
+- name: Verify RabbitMQ credentials agree across services
+  ansible.builtin.assert:
+    that:
+      - (waypoint_secrets.results[0].stdout | from_json).data.RABBITMQ_USER == (waypoint_secrets.results[1].stdout | from_json).data.RABBITMQ_USER
+      - (waypoint_secrets.results[0].stdout | from_json).data.RABBITMQ_PASSWORD == (waypoint_secrets.results[1].stdout | from_json).data.RABBITMQ_PASSWORD
+    fail_msg: Planning and RabbitMQ credentials differ; do not replace existing broker credentials automatically.
+  no_log: true
+
+- name: Compare common manifests against server-defaulted resources
+  ansible.builtin.command:
+    argv: [kubectl, '--kubeconfig', "{{ waypoint_kubeconfig }}", diff, -f, "{{ waypoint_manifest_dir }}/{{ item }}"]
+  loop: [configmap.yaml, supabase-db-ca.yaml, rabbitmq.yaml]
+  register: waypoint_diff
+  changed_when: ansible_check_mode and waypoint_diff.rc == 1
+  failed_when: waypoint_diff.rc not in [0, 1]
+  check_mode: false
+
+- name: Show proposed public configuration changes in check mode
+  ansible.builtin.debug:
+    msg: "{{ item.stdout }}"
+  loop: "{{ waypoint_diff.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - ansible_check_mode
+    - item.rc == 1
+
+- name: Apply common configuration only when it differs
+  ansible.builtin.command:
+    argv: [kubectl, '--kubeconfig', "{{ waypoint_kubeconfig }}", apply, -f, "{{ waypoint_manifest_dir }}/{{ item.item }}"]
+  loop: "{{ waypoint_diff.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - item.rc == 1
+
+- name: Wait for persistent RabbitMQ readiness
+  ansible.builtin.command:
+    argv: [kubectl, '--kubeconfig', "{{ waypoint_kubeconfig }}", -n, "{{ waypoint_namespace }}", rollout, status, statefulset/rabbitmq, '--timeout=300s']
+  changed_when: false
+  when: not ansible_check_mode

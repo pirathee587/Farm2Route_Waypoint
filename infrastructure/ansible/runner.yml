@@ -1,0 +1,7 @@
+---
+- name: Configure the Amazon Linux build runner
+  hosts: runners
+  become: true
+  gather_facts: true
+  roles:
+    - runner

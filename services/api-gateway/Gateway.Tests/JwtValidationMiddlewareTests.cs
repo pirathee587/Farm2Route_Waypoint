@@ -67,7 +67,8 @@ public class JwtValidationMiddlewareTests
             ["Jwt:Issuer"] = "test-issuer",
             ["Jwt:Audience"] = "test-audience"
         }).Build();
-        return new JwtValidationMiddleware(next, NullLogger<JwtValidationMiddleware>.Instance, config);
+        return new JwtValidationMiddleware(next, NullLogger<JwtValidationMiddleware>.Instance, config,
+            new Gateway.Api.Config.WebSocketTicketReplayCache(TimeProvider.System));
     }
 
     private static DefaultHttpContext Request(string path, string? token)

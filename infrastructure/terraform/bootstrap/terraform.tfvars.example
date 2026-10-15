@@ -1,0 +1,2 @@
+owner = "REPLACE_OWNER"
+state_bucket_name = "REPLACE_GLOBALLY_UNIQUE_BUCKET"

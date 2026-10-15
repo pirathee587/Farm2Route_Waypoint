@@ -1,0 +1,5 @@
+---
+- name: Configure common runner tools
+  ansible.builtin.import_playbook: runner.yml
+- name: Configure common cluster dependencies
+  ansible.builtin.import_playbook: cluster.yml

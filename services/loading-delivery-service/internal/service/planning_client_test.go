@@ -2,10 +2,11 @@ package service_test
 
 import (
 	"context"
-	"encoding/json"
+	planningpb "github.com/waypoint/loading-delivery-service/internal/planningpb"
 	"io"
 	"log/slog"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,9 +41,11 @@ func setupBufconnServer(t *testing.T, handler grpc.StreamHandler) (*bufconn.List
 func TestPlanningClient_Bufconn_Success(t *testing.T) {
 	// Handler that returns success
 	handler := func(srv interface{}, stream grpc.ServerStream) error {
-		var req json.RawMessage
-		_ = stream.RecvMsg(&req)
-		return stream.SendMsg(map[string]any{"trip_id": "20400000-0000-0000-0000-000000000204"})
+		var req planningpb.GetTripRequest
+		if err := stream.RecvMsg(&req); err != nil {
+			return err
+		}
+		return stream.SendMsg(&planningpb.GetTripResponse{Trip: &planningpb.Trip{TripId: req.TripId, VehicleId: "VEH-1", DriverId: "driver", TripNumber: 2, DeliveryDate: "2026-10-14", Status: "CONFIRMED", StopSequence: []string{"OUT-1"}, TotalWeightKg: 42, TotalVolumeM3: 3}})
 	}
 
 	lis, cleanup := setupBufconnServer(t, handler)
@@ -60,14 +63,18 @@ func TestPlanningClient_Bufconn_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, snapshot)
 	assert.Equal(t, "20400000-0000-0000-0000-000000000204", snapshot.TripID)
+	assert.Equal(t, "VEH-1", snapshot.VehicleID)
+	assert.Equal(t, 2, snapshot.TripNumber)
+	assert.Equal(t, 42.0, snapshot.TotalWeightKg)
+	assert.Equal(t, []string{"OUT-1"}, snapshot.StopSequence)
 	assert.False(t, service.PlanningSnapshotStale(err), "successful bufconn call must produce stale=false")
 }
 
 func TestPlanningClient_Bufconn_TimeoutAndRetry(t *testing.T) {
-	attempts := 0
+	var attempts atomic.Int32
 	// Handler that delays longer than client timeout
 	handler := func(srv interface{}, stream grpc.ServerStream) error {
-		attempts++
+		attempts.Add(1)
 		select {
 		case <-time.After(300 * time.Millisecond):
 			return nil
@@ -91,7 +98,7 @@ func TestPlanningClient_Bufconn_TimeoutAndRetry(t *testing.T) {
 	_, err := client.FetchTripDetails(context.Background(), "20400000-0000-0000-0000-000000000204")
 	require.Error(t, err)
 	// Verifies initial attempt + 1 retry = 2 attempts
-	assert.Equal(t, 2, attempts, "Expected initial call plus 1 retry attempt")
+	assert.Equal(t, int32(2), attempts.Load(), "Expected initial call plus 1 retry attempt")
 }
 
 func TestPlanningClient_Bufconn_Failure(t *testing.T) {

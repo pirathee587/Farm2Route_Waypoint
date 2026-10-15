@@ -1,3 +1,4 @@
+using Gateway.Api.Config;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -21,6 +22,8 @@ public sealed class JwtValidationMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<JwtValidationMiddleware> _logger;
     private readonly TokenValidationParameters _validationParams;
+    private readonly IConfiguration _config;
+    private readonly WebSocketTicketReplayCache _ticketReplayCache;
 
     // ── Public routes — skip JWT check ────────────────────────────────────
     private static readonly HashSet<string> _publicPrefixes =
@@ -36,16 +39,19 @@ public sealed class JwtValidationMiddleware
     public JwtValidationMiddleware(
         RequestDelegate next,
         ILogger<JwtValidationMiddleware> logger,
-        IConfiguration config)
+        IConfiguration config,
+        WebSocketTicketReplayCache ticketReplayCache)
     {
+        _config = config;
         _next   = next;
         _logger = logger;
+        _ticketReplayCache = ticketReplayCache;
 
-        var secret = config["Jwt:Secret"]
-            ?? throw new InvalidOperationException("Jwt:Secret missing");
+        var secret = JwtSafety.RequireSecret(config["Jwt:Secret"]);
 
         _validationParams = new TokenValidationParameters
         {
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             ValidateIssuerSigningKey = true,
             IssuerSigningKey         = new SymmetricSecurityKey(
                                          Encoding.UTF8.GetBytes(secret)),
@@ -65,7 +71,8 @@ public sealed class JwtValidationMiddleware
         var path = context.Request.Path.Value ?? string.Empty;
 
         // Never trust outlet identity supplied by a client, including on public routes.
-        context.Request.Headers.Remove("X-Outlet-Id");
+        foreach (var headerName in context.Request.Headers.Keys.Where(k => k.StartsWith("X-User-", StringComparison.OrdinalIgnoreCase) || k.Equals("X-Outlet-Id", StringComparison.OrdinalIgnoreCase) || k.Equals("X-Gateway-Verified", StringComparison.OrdinalIgnoreCase)).ToArray())
+            context.Request.Headers.Remove(headerName);
 
         // ── 1. Whitelist check — public routes bypass JWT ─────────────────
         if (IsPublicRoute(path))
@@ -73,6 +80,29 @@ public sealed class JwtValidationMiddleware
             _logger.LogDebug("Public route {Path} — skipping JWT validation", path);
             await _next(context);
             return;
+        }
+
+        var websocket = path == WebSocketTickets.Path && context.WebSockets.IsWebSocketRequest;
+        string? ticket = null;
+        if (path == WebSocketTickets.Path)
+        {
+            if (!websocket || !WebSocketTickets.OriginAllowed(context.Request.Headers.Origin.ToString(), _config))
+            {
+                context.Response.StatusCode = 403;
+                return;
+            }
+            var protocols = context.Request.Headers["Sec-WebSocket-Protocol"].ToString().Split(',').Select(x => x.Trim()).ToArray();
+            var tickets = protocols.Where(x => x.StartsWith(WebSocketTickets.ProtocolPrefix, StringComparison.Ordinal)).ToArray();
+            if (tickets.Length != 1 || !protocols.Contains("waypoint"))
+            {
+                await WriteUnauthorized(context, "A short-lived WebSocket ticket is required.");
+                return;
+            }
+            ticket = tickets[0][WebSocketTickets.ProtocolPrefix.Length..];
+            if (ticket.Length > 8192) { context.Response.StatusCode = 400; return; }
+            // Never proxy or echo the ticket protocol to the backend/browser.
+            context.Request.Headers["Sec-WebSocket-Protocol"] = "waypoint";
+            context.Request.Headers.Authorization = "Bearer " + ticket;
         }
 
         // ── 2. Extract Bearer token ───────────────────────────────────────
@@ -95,7 +125,24 @@ public sealed class JwtValidationMiddleware
                 MapInboundClaims = false   // Keep original claim names (e.g., "role" not "http://...")
             };
 
-            principal = handler.ValidateToken(token, _validationParams, out _);
+            var validation = _validationParams.Clone();
+            if (websocket) { validation.ValidAudience = WebSocketTickets.Audience; validation.ClockSkew = TimeSpan.Zero; }
+            principal = handler.ValidateToken(token, validation, out _);
+            if (websocket != (principal.FindFirst("purpose")?.Value == "websocket"))
+                throw new SecurityTokenValidationException("Token purpose mismatch.");
+
+            if (websocket)
+            {
+                var jti = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var exp = principal.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
+                if (string.IsNullOrWhiteSpace(jti)
+                    || !long.TryParse(exp, out var expiresAt)
+                    || !_ticketReplayCache.TryConsume(jti, expiresAt))
+                {
+                    await WriteUnauthorized(context, "WebSocket ticket has already been used.");
+                    return;
+                }
+            }
         }
         catch (SecurityTokenExpiredException ex)
         {
@@ -163,8 +210,7 @@ public sealed class JwtValidationMiddleware
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private static bool IsPublicRoute(string path)
-        => _publicPrefixes.Any(prefix =>
-               path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        => _publicPrefixes.Contains(path.TrimEnd('/'));
 
     private static string GetClaim(IEnumerable<Claim> claims, string type)
         => claims.FirstOrDefault(c => c.Type == type)?.Value ?? string.Empty;

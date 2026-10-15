@@ -4,7 +4,7 @@ spring:
 
   # ── Supabase / PostgreSQL (Shared Pooler) ────────────────────────────────
   datasource:
-    url: ${DB_URL:jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require}
+    url: ${DB_URL:jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=verify-full&sslrootcert=${DB_ROOT_CERT_PATH:/etc/db-ca/root.crt}}
     username: ${DB_USERNAME:${SUPABASE_DB_USER}}
     password: ${DB_PASSWORD:${SUPABASE_DB_PASSWORD}}
     driver-class-name: org.postgresql.Driver

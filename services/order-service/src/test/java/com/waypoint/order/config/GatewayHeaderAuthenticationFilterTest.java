@@ -72,18 +72,14 @@ class GatewayHeaderAuthenticationFilterTest {
     }
 
     @Test
-    void ignoresOutletHeaderWithoutTrustedGatewayMarker() throws Exception {
+    void rejectsRequestWithoutTrustedGatewayMarker() throws Exception {
         var request = requestWithHeaders();
         request.removeHeader("X-Gateway-Verified");
         var response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, new MockFilterChain());
 
-        var authentication = SecurityContextHolder.getContext().getAuthentication();
-        assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(authentication).isNotNull();
-        assertThat(authentication.getPrincipal())
-            .isEqualTo(new GatewayHeaderAuthenticationFilter.GatewayUserPrincipal(
-                "user-123", "manager@example.com", null));
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 }

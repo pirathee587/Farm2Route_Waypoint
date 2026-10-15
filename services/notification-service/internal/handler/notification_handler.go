@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/waypoint/notification-service/internal/middleware"
@@ -13,15 +15,22 @@ import (
 	"github.com/waypoint/notification-service/internal/repository"
 )
 
-// upgrader is the gorilla/websocket upgrader. CheckOrigin is permissive here
-// because JWT validation is handled upstream by the API Gateway.
+func allowedOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+	for _, allowed := range strings.Split(os.Getenv("WS_ALLOWED_ORIGINS"), ",") {
+		if origin == strings.TrimSpace(allowed) {
+			return true
+		}
+	}
+	return false
+}
+
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Gateway strips the raw JWT and injects X-Gateway-Verified; trust that.
-		return true
-	},
+	ReadBufferSize: 1024, WriteBufferSize: 1024,
+	Subprotocols: []string{"waypoint"}, CheckOrigin: allowedOrigin,
 }
 
 // NotificationHandler handles all REST endpoints and the WebSocket upgrade endpoint.
@@ -102,7 +111,7 @@ func (h *NotificationHandler) GetNotifications(w http.ResponseWriter, r *http.Re
 
 	notifications, unreadCount, err := h.repo.ListForUser(r.Context(), user.UserID, unreadOnly, page, pageSize)
 	if err != nil {
-		model.ErrInternal("Failed to retrieve notifications: "+err.Error()).WriteJSON(w)
+		model.ErrInternal("Failed to retrieve notifications: " + err.Error()).WriteJSON(w)
 		return
 	}
 	if notifications == nil {
@@ -140,7 +149,7 @@ func (h *NotificationHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 
 	count, err := h.repo.MarkRead(r.Context(), user.UserID, req.NotificationIDs)
 	if err != nil {
-		model.ErrInternal("Failed to mark notifications as read: "+err.Error()).WriteJSON(w)
+		model.ErrInternal("Failed to mark notifications as read: " + err.Error()).WriteJSON(w)
 		return
 	}
 
@@ -157,30 +166,27 @@ func (h *NotificationHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 
 // HealthHandler returns a 200 with basic service status.
 type HealthHandler struct {
-	pool interface{ Ping(context.Context) error }
+	pool         interface{ Ping(context.Context) error }
+	dependencies []func() bool
 }
 
 // NewHealthHandler creates a health handler. pool may be nil (degraded mode).
-func NewHealthHandler(pool interface{ Ping(context.Context) error }) *HealthHandler {
-	return &HealthHandler{pool: pool}
+func NewHealthHandler(pool interface{ Ping(context.Context) error }, dependencies ...func() bool) *HealthHandler {
+	return &HealthHandler{pool: pool, dependencies: dependencies}
 }
 
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	status := "ok"
-	dbStatus := "ok"
-	if h.pool != nil {
-		if err := h.pool.Ping(r.Context()); err != nil {
-			dbStatus = "degraded: " + err.Error()
-		}
-	} else {
-		dbStatus = "not connected"
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	ready := h.pool != nil && h.pool.Ping(ctx) == nil
+	for _, dependency := range h.dependencies {
+		ready = ready && dependency()
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status":   status,
-		"database": dbStatus,
-		"service":  "notification-service",
-	})
+	if !ready {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ready": ready})
 }

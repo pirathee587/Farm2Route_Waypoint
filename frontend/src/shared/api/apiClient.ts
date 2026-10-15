@@ -1,6 +1,5 @@
 import { authSession } from '@/features/auth/authSession';
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+import { apiUrl } from './apiBase';
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string) {
@@ -21,7 +20,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('X-User-Email', session.user.email);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const response = await fetch(apiUrl(path), { ...init, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const message = body.message || body.error || body.title || `Request failed (${response.status})`;

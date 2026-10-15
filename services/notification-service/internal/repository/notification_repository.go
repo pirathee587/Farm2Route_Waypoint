@@ -85,6 +85,60 @@ func (r *NotificationRepository) CreateForRoles(
 	return int(tag.RowsAffected()), nil
 }
 
+// CreateForRolesOnce is the idempotent form of CreateForRoles. It records
+// eventKey in public.notification_event_receipts and inserts the fan-out rows in
+// the same transaction. If the key was already committed, nothing is inserted
+// and duplicate is true. Concurrent deliveries of the same key serialise on the
+// receipt primary key, so at most one of them commits notifications.
+func (r *NotificationRepository) CreateForRolesOnce(
+	ctx context.Context,
+	eventKey string,
+	targetRoles []string,
+	eventType, title, body, payloadJSON string,
+) (inserted int, duplicate bool, err error) {
+	if eventKey == "" {
+		return 0, false, fmt.Errorf("notifications: empty event key")
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, false, fmt.Errorf("notifications: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO public.notification_event_receipts (event_key, event_type)
+		VALUES ($1, $2)
+		ON CONFLICT (event_key) DO NOTHING
+	`, eventKey, eventType)
+	if err != nil {
+		return 0, false, fmt.Errorf("notifications: record receipt: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return 0, true, nil
+	}
+
+	if len(targetRoles) > 0 {
+		tag, err = tx.Exec(ctx, `
+			INSERT INTO public.notifications
+			    (user_id, event_type, title, body, payload_json, read, created_at)
+			SELECT id::text, $2, $3, $4, $5, false, NOW()
+			FROM   public.user_profiles
+			WHERE  role = ANY($1)
+			  AND  is_active = true
+		`, targetRoles, eventType, title, body, payloadJSON)
+		if err != nil {
+			return 0, false, fmt.Errorf("notifications: create for roles %v: %w", targetRoles, err)
+		}
+		inserted = int(tag.RowsAffected())
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, false, fmt.Errorf("notifications: commit: %w", err)
+	}
+	return inserted, false, nil
+}
+
 // ListForUser returns paginated notifications for a single user.
 // When unreadOnly is true only unread rows are returned.
 func (r *NotificationRepository) ListForUser(

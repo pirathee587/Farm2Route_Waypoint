@@ -1,10 +1,12 @@
 using Auth.Application.DTOs.Response;
+using Microsoft.AspNetCore.Authorization;
 using Auth.Application.Interfaces;
 using Auth.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Auth.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/users")]
 public class UserController : ControllerBase
@@ -18,15 +20,6 @@ public class UserController : ControllerBase
 
     private bool IsAuthorizedDispatcher()
     {
-        // 1. Check Gateway injected identity headers
-        var roleHeader = Request.Headers["X-User-Role"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(roleHeader))
-        {
-            return string.Equals(roleHeader, "DISPATCHER", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(roleHeader, "ADMIN", StringComparison.OrdinalIgnoreCase);
-        }
-
-        // 2. Direct call with JWT Authorization header
         if (User.Identity?.IsAuthenticated == true)
         {
             var roleClaim = User.Claims.FirstOrDefault(c => c.Type == "role" || c.Type == System.Security.Claims.ClaimTypes.Role)?.Value;

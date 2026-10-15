@@ -1,0 +1,24 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: waypoint-gp3-retain
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: 'true'
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loading-uploads
+  namespace: waypoint-dev
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: waypoint-gp3-retain
+  resources:
+    requests:
+      storage: 10Gi

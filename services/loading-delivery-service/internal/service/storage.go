@@ -3,7 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/waypoint/loading-delivery-service/internal/middleware"
 	"io"
 	"net/http"
 	"os"
@@ -79,7 +82,7 @@ func NewLocalStorageService(baseDir, baseURL string) (*LocalStorageService, erro
 		baseDir = "uploads/shortfalls"
 	}
 	if baseURL == "" {
-		baseURL = "/uploads/shortfalls"
+		baseURL = "/api/loading/uploads"
 	}
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create upload directory %s: %w", baseDir, err)
@@ -100,13 +103,22 @@ func (s *LocalStorageService) UploadShortfallPhoto(ctx context.Context, original
 		ext = ".png"
 	}
 
+	user, ok := middleware.GetUserFromContext(ctx)
+	if !ok {
+		return "", model.ErrUnauthorized("Upload owner is required")
+	}
 	uniqueName := fmt.Sprintf("%s_%d%s", uuid.New().String(), time.Now().Unix(), ext)
 	targetPath := filepath.Join(s.baseDir, uniqueName)
 
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+	if err := os.WriteFile(targetPath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save photo locally: %w", err)
 	}
 
+	owner, _ := json.Marshal(map[string]string{"owner": user.UserID.String()})
+	if err := os.WriteFile(targetPath+".owner.json", owner, 0600); err != nil {
+		_ = os.Remove(targetPath)
+		return "", fmt.Errorf("persist upload ownership: %w", err)
+	}
 	return fmt.Sprintf("%s/%s", strings.TrimSuffix(s.baseURL, "/"), uniqueName), nil
 }
 
@@ -150,20 +162,65 @@ func (s *SupabaseStorageService) UploadShortfallPhoto(ctx context.Context, origi
 	if len(data) == 0 {
 		return "", nil
 	}
-	ext := ".jpg"
-	if strings.HasSuffix(strings.ToLower(originalFilename), ".png") || contentType == "image/png" {
-		ext = ".png"
-	}
-	uniqueName := fmt.Sprintf("shortfalls/%s_%d%s", uuid.New().String(), time.Now().Unix(), ext)
-	// Return bucket path
-	return fmt.Sprintf("pod-images/%s", uniqueName), nil
+	return s.UploadPOD(ctx, "shortfall", "photo", originalFilename, data, contentType)
 }
 
+// ServeHTTP exposes only individual owner-authorized images, never directory listings.
+func (s *LocalStorageService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	user, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", 401)
+		return
+	}
+	name := r.PathValue("filename")
+	if name == "" || filepath.Base(name) != name || strings.ContainsAny(name, "/\\") ||
+		!(strings.HasSuffix(name, ".jpg") || strings.HasSuffix(name, ".png")) {
+		http.NotFound(w, r)
+		return
+	}
+	path := filepath.Join(s.baseDir, name)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, r)
+		return
+	}
+	raw, err := os.ReadFile(path + ".owner.json")
+	var ownership map[string]string
+	if err != nil || json.Unmarshal(raw, &ownership) != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if ownership["owner"] != user.UserID.String() && user.Role != "DISPATCHER" && user.Role != "ADMIN" {
+		http.Error(w, "Forbidden", 403)
+		return
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, no-store")
+	http.ServeFile(w, r, path)
+}
+
+// NewStorageServiceFromEnv fails closed instead of returning a nil storage service.
 func NewStorageServiceFromEnv() StorageService {
+	storage, err := StorageServiceFromEnv()
+	if err != nil {
+		panic(err)
+	}
+	return storage
+}
+func StorageServiceFromEnv() (StorageService, error) {
 	mode := strings.ToLower(os.Getenv("STORAGE_MODE"))
 	if mode == "supabase" {
-		return NewSupabaseStorageService(os.Getenv("SUPABASE_URL"))
+		if os.Getenv("SUPABASE_URL") == "" || os.Getenv("SUPABASE_SERVICE_ROLE_KEY") == "" {
+			return nil, errors.New("Supabase storage configuration is missing")
+		}
+		return NewSupabaseStorageService(os.Getenv("SUPABASE_URL")), nil
 	}
-	local, _ := NewLocalStorageService("uploads/shortfalls", "/uploads/shortfalls")
-	return local
+	if mode != "" && mode != "local" {
+		return nil, errors.New("unsupported STORAGE_MODE")
+	}
+	dir := os.Getenv("UPLOAD_DIR")
+	if dir == "" {
+		dir = "uploads"
+	}
+	return NewLocalStorageService(filepath.Join(dir, "shortfalls"), "/api/loading/uploads")
 }

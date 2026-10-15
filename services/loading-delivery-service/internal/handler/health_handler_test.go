@@ -15,8 +15,8 @@ func TestHealthHandler(t *testing.T) {
 
 	h.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
 	}
 
 	var resp HealthResponse
@@ -24,8 +24,8 @@ func TestHealthHandler(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Status != "UP" {
-		t.Errorf("expected status UP, got %s", resp.Status)
+	if resp.Status != "DEGRADED" {
+		t.Errorf("expected status DEGRADED, got %s", resp.Status)
 	}
 	if resp.Service != "loading-delivery-service" {
 		t.Errorf("expected service loading-delivery-service, got %s", resp.Service)

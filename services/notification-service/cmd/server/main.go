@@ -65,7 +65,7 @@ func main() {
 				Name:         os.Getenv("SUPABASE_DB_NAME"),
 				User:         os.Getenv("SUPABASE_DB_USER"),
 				Password:     os.Getenv("SUPABASE_DB_PASSWORD"),
-				SSLMode:      "require",
+				SSLMode:      "verify-full",
 				MaxOpenConns: 10,
 				MaxIdleConns: 2,
 			},
@@ -103,7 +103,13 @@ func main() {
 	)
 
 	// ── Services ──────────────────────────────────────────────────────────────
-	notifService := service.NewNotificationService(notifRepo, hub, logger)
+	// Pass an untyped nil Store when the DB is unavailable; a typed nil pointer
+	// would defeat the service's nil check.
+	var store service.Store
+	if notifRepo != nil {
+		store = notifRepo
+	}
+	notifService := service.NewNotificationService(store, hub, logger)
 
 	// ── RabbitMQ Consumer ─────────────────────────────────────────────────────
 	amqpURL := os.Getenv("RABBITMQ_URL")
@@ -136,6 +142,16 @@ func main() {
 		queues,
 		notifService.HandleEvent,
 		logger,
+		messaging.Options{
+			Retry: messaging.RetryPolicy{
+				MaxAttempts:    cfg.RabbitMQ.MaxAttempts,
+				InitialBackoff: time.Duration(cfg.RabbitMQ.RetryInitialBackoffMs) * time.Millisecond,
+				MaxBackoff:     time.Duration(cfg.RabbitMQ.RetryMaxBackoffMs) * time.Millisecond,
+			},
+			DeadLetterQueue: cfg.RabbitMQ.DeadLetterQueue,
+			// Leave messages queued (not dead-lettered) while the DB is unreachable.
+			Gate: poolPinger{p: pgDB}.Ping,
+		},
 	)
 	consumer.Start()
 	defer consumer.Stop()
@@ -146,7 +162,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Health — public (no auth)
-	mux.Handle("/health", handler.NewHealthHandler(poolPinger{p: pgDB}))
+	mux.Handle("/health", handler.NewHealthHandler(poolPinger{p: pgDB}, consumer.Ready))
 
 	// WebSocket + Notification REST — gateway-auth protected
 	notifyMux := http.NewServeMux()

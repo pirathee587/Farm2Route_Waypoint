@@ -1,0 +1,8 @@
+all:
+  children:
+    runners:
+      hosts:
+        localhost:
+          ansible_connection: local
+          # AL2023's DNF bindings belong to the system Python, not the controller venv.
+          ansible_python_interpreter: /usr/bin/python3

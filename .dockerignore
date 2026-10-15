@@ -17,3 +17,10 @@ ml-datathon/data
 ml-datathon/notebooks
 nginx/certs
 *.log
+
+infrastructure/terraform
+infrastructure/local
+infrastructure/rendered
+**/*.tfstate*
+**/*.tfvars
+**/*.tfplan

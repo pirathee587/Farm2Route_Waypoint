@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -48,14 +49,20 @@ type LoadingCompletedEventTestShape struct {
 	IssueCount int    `json:"issue_count"`
 }
 
+// Fixtures can reset data: never fall back to application credentials or remote hosts.
+func fixtureURL(t *testing.T, key, path string) string {
+	t.Helper()
+	raw := os.Getenv(key)
+	require.NotEmpty(t, raw, "explicit isolated fixture URL required")
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	require.Contains(t, []string{"localhost", "127.0.0.1", "::1"}, u.Hostname(), "fixture must be loopback-only")
+	require.Equal(t, path, u.Path, "unexpected fixture database/vhost")
+	return raw
+}
+
 func getTestPool(t *testing.T) *pgxpool.Pool {
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	if dbURL == "" {
-		dbURL = "postgres://postgres:postgrespassword@localhost:5433/waypoint_test?sslmode=disable"
-	}
+	dbURL := fixtureURL(t, "TEST_DATABASE_URL", "/waypoint_test")
 
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	require.NoError(t, err, "Failed to parse database connection URL")
@@ -729,13 +736,7 @@ func TestIntegration_DemoFlow_P5_P6(t *testing.T) {
 	assert.Equal(t, n, len(logs2), "Re-confirm must not duplicate activity log entries")
 
 	// 8. Outbox row published and a test consumer receives flag.raised exactly once
-	amqpURL := os.Getenv("TEST_RABBITMQ_URL")
-	if amqpURL == "" {
-		amqpURL = os.Getenv("RABBITMQ_URL")
-	}
-	if amqpURL == "" {
-		amqpURL = "amqp://guest:guest@localhost:5673/"
-	}
+	amqpURL := fixtureURL(t, "TEST_RABBITMQ_URL", "/")
 
 	conn, err := amqp.Dial(amqpURL)
 	require.NoError(t, err, "Failed to connect to test RabbitMQ")
@@ -910,10 +911,7 @@ func TestIntegration_AllocationCompletedRabbitMQ(t *testing.T) {
 	`, tripID, driverID)
 	require.NoError(t, err)
 
-	amqpURL := os.Getenv("TEST_RABBITMQ_URL")
-	if amqpURL == "" {
-		amqpURL = "amqp://guest:guest@localhost:5673/"
-	}
+	amqpURL := fixtureURL(t, "TEST_RABBITMQ_URL", "/")
 	consumer := service.NewAllocationConsumer(repository.NewAllocationRepository(pool), amqpURL, "waypoint.events", slog.Default())
 	consumer.Start()
 	defer consumer.Stop()

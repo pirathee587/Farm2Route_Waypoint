@@ -9,11 +9,12 @@ namespace Gateway.Api.Config;
 /// Backend services check this header to confirm the request
 /// came through the gateway (and therefore JWT was already validated).
 ///
-/// Also strips the original Authorization header from downstream requests
-/// — backends only need the X-User-* headers injected by JwtValidationMiddleware.
+/// Preserves bearer authentication for Auth; other backends receive verified identity headers.
 /// </summary>
 public sealed class GatewayTransformProvider : ITransformProvider
 {
+    public static bool PreserveAuthorization(string? clusterId) => clusterId == "auth-cluster";
+
     public void ValidateRoute(TransformRouteValidationContext context) { }
     public void ValidateCluster(TransformClusterValidationContext context) { }
 
@@ -27,9 +28,9 @@ public sealed class GatewayTransformProvider : ITransformProvider
         context.AddXForwardedHost();
         context.AddXForwardedProto();
 
-        // Remove Authorization header from upstream request.
-        // X-User-Id / X-User-Role / X-User-Email are already injected
-        // by JwtValidationMiddleware — that's enough for backend trust.
-        context.AddRequestHeaderRemove("Authorization");
+        // Auth validates the bearer token itself. Other services trust headers only
+        // within the gateway-only network boundary.
+        if (!PreserveAuthorization(context.Route.ClusterId))
+            context.AddRequestHeaderRemove("Authorization");
     }
 }
