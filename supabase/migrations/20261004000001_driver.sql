@@ -22,6 +22,9 @@ ALTER TABLE public.sync_queue
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_queue_operation_id
   ON public.sync_queue(operation_id);
 
+-- This index needs stop_id before the later proof-of-delivery migration runs.
+ALTER TABLE public.delivery_records
+  ADD COLUMN IF NOT EXISTS stop_id UUID REFERENCES public.load_stops(stop_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_records_stop
   ON public.delivery_records(stop_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_driver_trips_today

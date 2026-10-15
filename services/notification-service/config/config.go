@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -57,10 +59,13 @@ func (d DatabaseConfig) DSN() string {
 		d.User = "postgres"
 	}
 	if d.SSLMode == "" {
-		d.SSLMode = "disable"
+		d.SSLMode = "verify-full"
 	}
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.Name, d.SSLMode)
+	u := url.URL{Scheme: "postgres", Host: net.JoinHostPort(d.Host, d.Port), Path: "/" + d.Name, User: url.UserPassword(d.User, d.Password)}
+	q := u.Query()
+	q.Set("sslmode", d.SSLMode)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // MaxLifetimeDuration returns the connection maximum lifetime as a duration.
@@ -75,6 +80,12 @@ type RabbitMQConfig struct {
 	URL      string            `yaml:"url"`
 	Exchange string            `yaml:"exchange"`
 	Queues   map[string]string `yaml:"queues"`
+	// Optional delivery-failure policy. Zero values use messaging defaults
+	// (5 attempts, 500ms initial / 8s max back-off, notification.dead-letter).
+	MaxAttempts           int    `yaml:"max_attempts"`
+	RetryInitialBackoffMs int    `yaml:"retry_initial_backoff_ms"`
+	RetryMaxBackoffMs     int    `yaml:"retry_max_backoff_ms"`
+	DeadLetterQueue       string `yaml:"dead_letter_queue"`
 }
 
 type JWTConfig struct {

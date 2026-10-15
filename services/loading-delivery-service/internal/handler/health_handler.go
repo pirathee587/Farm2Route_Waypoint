@@ -1,11 +1,10 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/waypoint/loading-delivery-service/internal/repository"
 )
 
 // HealthResponse represents the health check status response
@@ -18,10 +17,10 @@ type HealthResponse struct {
 
 // HealthHandler serves the /health endpoint
 type HealthHandler struct {
-	db *repository.PostgresDB
+	db interface{ Ping(context.Context) error }
 }
 
-func NewHealthHandler(db *repository.PostgresDB) *HealthHandler {
+func NewHealthHandler(db interface{ Ping(context.Context) error }) *HealthHandler {
 	return &HealthHandler{db: db}
 }
 
@@ -41,7 +40,7 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	overallStatus := "UP"
-	if dbStatus == "DOWN" {
+	if dbStatus != "UP" {
 		overallStatus = "DEGRADED"
 	}
 
@@ -53,6 +52,10 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	if dbStatus != "UP" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 	_ = json.NewEncoder(w).Encode(resp)
 }

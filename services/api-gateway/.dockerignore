@@ -1,0 +1,13 @@
+**/.env
+**/.env.*
+!**/.env.example
+.git
+**/bin
+**/obj
+**/target
+**/node_modules
+**/uploads
+**/*.key
+**/*.pem
+**/*.pfx
+**/TestResults

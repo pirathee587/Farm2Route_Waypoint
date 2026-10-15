@@ -8,6 +8,7 @@ import {
 import { calculateDistanceMeters, roundCoordinate } from '../lib/geo';
 import { authSession } from '@/features/auth/authSession';
 import { apiRequest } from '@/shared/api/apiClient';
+import { apiUrl } from '@/shared/api/apiBase';
 
 const ROUTE_CACHE_PREFIX = 'waypoint_route_cache_';
 const TODAY_CACHE_KEY = 'waypoint_driver_today_cache';
@@ -86,7 +87,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
     let isMounted = true;
     async function fetchTodayTrip() {
       try {
-        const res = await fetch('/api/delivery/runs/today', {
+        const res = await fetch(apiUrl('/delivery/runs/today'), {
           headers: getAuthHeaders(),
         });
         if (res.ok) {
@@ -168,7 +169,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
       setError(null);
 
       try {
-        const res = await fetch(`/api/delivery/driver/trips/${tripId}/route${queryParams}`, {
+        const res = await fetch(apiUrl(`/delivery/driver/trips/${tripId}/route${queryParams}`), {
           headers: getAuthHeaders(),
           signal: controller.signal,
         });
@@ -224,7 +225,7 @@ export function useRouteMap(options: UseRouteMapOptions = {}) {
 
   const fetchFullGeometry = async (currentTripId: string, signal: AbortSignal) => {
     try {
-      const res = await fetch(`/api/delivery/driver/trips/${currentTripId}/route/geometry`, {
+      const res = await fetch(apiUrl(`/delivery/driver/trips/${currentTripId}/route/geometry`), {
         headers: getAuthHeaders(),
         signal,
       });

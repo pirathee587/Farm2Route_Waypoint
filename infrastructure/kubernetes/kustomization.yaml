@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- configmap.yaml
+- supabase-db-ca.yaml
+- storage.yaml
+- applications.yaml
+- rabbitmq.yaml
+- network-policies.yaml
+- ingress.yaml
+- jenkins-rbac.yaml

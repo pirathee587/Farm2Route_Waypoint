@@ -16,13 +16,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var dbHost = builder.Configuration["SUPABASE_DB_HOST"];
-var dbPort = builder.Configuration["SUPABASE_DB_PORT"];
-var dbName = builder.Configuration["SUPABASE_DB_NAME"];
-var dbUser = builder.Configuration["SUPABASE_DB_USER"];
-var dbPassword = builder.Configuration["SUPABASE_DB_PASSWORD"];
-var dbSslMode = builder.Configuration["DB_SSL_MODE"] ?? "Require";
-var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword};Pooling=true;Maximum Pool Size=4;Minimum Pool Size=0;SSL Mode={dbSslMode};Trust Server Certificate=true";
+var connectionString = Auth.Api.Configuration.StartupSafety.ConnectionString(builder.Configuration);
 
 builder.Services.AddDbContext<AuthDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -30,13 +24,17 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-var jwtSecret = builder.Configuration["JWT_SECRET"] ?? throw new InvalidOperationException("JWT_SECRET is missing");
+var jwtSecret = JwtSafety.RequireSecret(builder.Configuration["JWT_SECRET"]);
 var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? "waypoint-auth";
 var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? "waypoint-clients";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
+    options.MapInboundClaims = false;
     options.TokenValidationParameters = new TokenValidationParameters
     {
+        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+        ClockSkew = TimeSpan.FromSeconds(30),
+        RoleClaimType = "role",
         ValidateIssuer = true,
         ValidIssuer = jwtIssuer,
         ValidateAudience = true,
@@ -59,24 +57,14 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-    try
-    {
-        context.Database.ExecuteSqlRaw("CREATE SCHEMA IF NOT EXISTS auth_schema;");
-        var creator = (RelationalDatabaseCreator)context.Database.GetService<IDatabaseCreator>();
-        creator.CreateTables();
-    }
-    catch
-    {
-    }
-
-    try
-    {
-        await DataSeeder.SeedAsync(context);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Database seeding notice: {ex.Message}");
-    }
+    await Auth.Api.Configuration.StartupSafety.InitializeAsync(builder.Configuration, app.Environment.IsDevelopment(),
+        async () => { await context.Database.EnsureCreatedAsync(); },
+        () => DataSeeder.SeedAsync(context),
+        async () => {
+            if (!await context.Database.CanConnectAsync()) return false;
+            await context.Users.AsNoTracking().Select(u => u.Id).Take(1).ToListAsync();
+            return true;
+        });
 }
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
@@ -88,5 +76,8 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/health", async (AuthDbContext db, CancellationToken cancellation) =>
+    await db.Database.CanConnectAsync(cancellation)
+        ? Results.Ok(new { status = "healthy" })
+        : Results.StatusCode(503));
 app.Run();

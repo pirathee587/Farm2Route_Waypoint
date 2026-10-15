@@ -1,0 +1,47 @@
+waypoint_region: ap-southeast-1
+waypoint_cluster: waypoint-dev
+waypoint_namespace: waypoint-dev
+waypoint_repo_root: /opt/waypoint/repo
+waypoint_state_dir: /opt/waypoint/ansible
+waypoint_manifest_dir: "{{ playbook_dir }}/../kubernetes"
+waypoint_kubeconfig: "{{ waypoint_state_dir }}/{{ waypoint_cluster }}-kubeconfig"
+waypoint_kubectl_version: v1.35.0
+waypoint_trivy_version: 0.76.0
+waypoint_tool_dir: /opt/waypoint/tools
+waypoint_runner_packages:
+  - ca-certificates
+  - curl-minimal
+  - docker
+  - git
+  - gzip
+  - jq
+  - openssl
+  - tar
+  - unzip
+  - util-linux
+  - shadow-utils
+  - awscli-2
+  - java-21-amazon-corretto-devel
+  - maven3.9-amazon-corretto21
+# Tool versions are explicit. OS packages use the configured AL2023 repository;
+# state=present repairs missing packages without an unsolicited system upgrade.
+waypoint_required_secret_keys:
+  planning-service-secrets:
+    - SUPABASE_DB_HOST
+    - SUPABASE_DB_PORT
+    - SUPABASE_DB_NAME
+    - SUPABASE_DB_USER
+    - SUPABASE_DB_PASSWORD
+    - RABBITMQ_USER
+    - RABBITMQ_PASSWORD
+  rabbitmq-secrets:
+    - RABBITMQ_USER
+    - RABBITMQ_PASSWORD
+# The repository's CI script also runs Go, .NET 8, and frontend tests on the host.
+waypoint_install_ci_toolchains: true
+waypoint_ci_packages:
+  - golang
+  - dotnet-sdk-8.0
+  - nodejs22
+  - nodejs22-npm
+  - python3-pyyaml

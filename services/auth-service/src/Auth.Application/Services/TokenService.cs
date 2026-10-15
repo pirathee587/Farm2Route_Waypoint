@@ -22,7 +22,7 @@ public class TokenService : ITokenService
 
     public string GenerateAccessToken(User user)
     {
-        var secret = _configuration["JWT_SECRET"] ?? throw new InvalidOperationException("JWT_SECRET is missing");
+        var secret = JwtSafety.RequireSecret(_configuration["JWT_SECRET"]);
         var issuer = _configuration["JWT_ISSUER"] ?? "waypoint-auth";
         var audience = _configuration["JWT_AUDIENCE"] ?? "waypoint-clients";
         var expiryMinutesStr = _configuration["JWT_EXPIRY_MINUTES"] ?? "60";
@@ -71,7 +71,7 @@ public class TokenService : ITokenService
 
     public ClaimsPrincipal? ValidateAccessToken(string token)
     {
-        var secret = _configuration["JWT_SECRET"] ?? throw new InvalidOperationException("JWT_SECRET is missing");
+        var secret = JwtSafety.RequireSecret(_configuration["JWT_SECRET"]);
         var issuer = _configuration["JWT_ISSUER"] ?? "waypoint-auth";
         var audience = _configuration["JWT_AUDIENCE"] ?? "waypoint-clients";
 
@@ -82,13 +82,15 @@ public class TokenService : ITokenService
         {
             var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
             {
+                ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = new SymmetricSecurityKey(key),
                 ValidateIssuer = true,
                 ValidIssuer = issuer,
                 ValidateAudience = true,
                 ValidAudience = audience,
-                ValidateLifetime = false // Allow expired tokens when we need to extract claims during refresh
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromSeconds(30)
             }, out var validatedToken);
 
             return principal;

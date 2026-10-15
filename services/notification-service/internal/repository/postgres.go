@@ -32,6 +32,10 @@ func NewPostgresPool(ctx context.Context, cfg DatabaseConfig) (*PostgresPool, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database DSN: %w", err)
 	}
+	// No plaintext fallback or certificate-verification bypass, even through DATABASE_URL.
+	if poolCfg.ConnConfig.TLSConfig == nil || poolCfg.ConnConfig.TLSConfig.InsecureSkipVerify || len(poolCfg.ConnConfig.Fallbacks) != 0 {
+		return nil, fmt.Errorf("database requires verify-full TLS without insecure fallbacks")
+	}
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	poolCfg.MaxConnLifetime = cfg.MaxLifetimeDuration()

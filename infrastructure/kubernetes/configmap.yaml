@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-config
+  namespace: waypoint-dev
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_URLS: http://+:8080
+  JWT_ISSUER: waypoint-auth
+  JWT_AUDIENCE: waypoint-clients
+  Jwt__Issuer: waypoint-auth
+  Jwt__Audience: waypoint-clients
+  Cors__AllowedOrigins__0: https://farm2-route-waypoint.vercel.app
+  Cors__AllowedOrigins__1: https://farm2-route-waypoint.vercel.app
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: '5672'
+  SPRING_RABBITMQ_VIRTUAL_HOST: waypoint
+  ORDER_SERVICE_GRPC_HOST: order-service
+  ORDER_SERVICE_GRPC_PORT: '9090'
+  PLANNING_SERVICE_GRPC_HOST: planning-service
+  PLANNING_SERVICE_GRPC_PORT: '9090'
+  PLANNING_GRPC_ADDR: planning-service:9090
+  PLANNING_GRPC_HOST: planning-service
+  PLANNING_GRPC_PORT: '9090'
+  SPRING_FLYWAY_ENABLED: 'false'
+  FLYWAY_ENABLED: 'false'
+  WAYPOINT_SEED_ENABLED: 'false'
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: never
+  DB_SSL_MODE: VerifyFull
+  STORAGE_MODE: local
+  DEMO_MODE: 'false'
+  WS_ALLOWED_ORIGINS: https://farm2-route-waypoint.vercel.app
+  Database__Initialize: 'false'
+  Database__SeedDevelopmentAccounts: 'false'
+  UPLOAD_DIR: /uploads
+  RABBITMQ_HEALTH_ENABLED: 'true'
+  DB_ROOT_CERT_PATH: /etc/db-ca/root.crt
+  DB_ROOT_CERTIFICATE: /etc/db-ca/root.crt
+  PGSSLROOTCERT: /etc/db-ca/root.crt

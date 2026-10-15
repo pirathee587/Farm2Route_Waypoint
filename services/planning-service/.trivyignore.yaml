@@ -1,0 +1,9 @@
+# Narrow approved exception for Spring Framework 6.2.x unpatched OSS CVEs
+# Upstream backport 6.2.20 is commercial-only; OSS fix requires Spring Framework 7.
+vulnerabilities:
+  - id: CVE-2026-47884
+    statement: "no XsltView/SSE usage, fix only in Spring 7"
+    expired_at: 2026-12-31
+  - id: CVE-2026-47890
+    statement: "no XsltView/SSE usage, fix only in Spring 7"
+    expired_at: 2026-12-31

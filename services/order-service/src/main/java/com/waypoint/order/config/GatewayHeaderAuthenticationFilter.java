@@ -38,11 +38,11 @@ public final class GatewayHeaderAuthenticationFilter extends OncePerRequestFilte
         String userId = request.getHeader(USER_ID_HEADER);
         String role = request.getHeader(USER_ROLE_HEADER);
         String email = request.getHeader(USER_EMAIL_HEADER);
-        String outletId = "true".equalsIgnoreCase(request.getHeader(GATEWAY_VERIFIED_HEADER))
-            ? request.getHeader(OUTLET_ID_HEADER)
-            : null;
+        String verified = request.getHeader(GATEWAY_VERIFIED_HEADER);
+        String outletId = request.getHeader(OUTLET_ID_HEADER);
 
-        if (isBlank(userId) || isBlank(role) || isBlank(email)) {
+        if (!"true".equalsIgnoreCase(verified == null ? "" : verified.trim())
+            || isBlank(userId) || isBlank(role) || isBlank(email)) {
             writeUnauthorized(response);
             return;
         }

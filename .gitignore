@@ -65,3 +65,17 @@ desktop.ini
 .vscode/settings.json
 *.swp
 *.swo
+
+# Terraform and local deployment inputs
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+**/*.tfvars
+**/*.tfvars.json
+**/*.auto.tfvars
+**/backend.hcl
+**/crash.log
+/infrastructure/rendered/
+/infrastructure/local/

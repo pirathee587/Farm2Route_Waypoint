@@ -2,41 +2,15 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
+	planningpb "github.com/waypoint/loading-delivery-service/internal/planningpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/encoding"
 )
-
-type rawJSONCodec struct{}
-
-func (rawJSONCodec) Marshal(v any) ([]byte, error) {
-	if b, ok := v.([]byte); ok {
-		return b, nil
-	}
-	return json.Marshal(v)
-}
-
-func (rawJSONCodec) Unmarshal(data []byte, v any) error {
-	if b, ok := v.(*[]byte); ok {
-		*b = append((*b)[0:0], data...)
-		return nil
-	}
-	return json.Unmarshal(data, v)
-}
-
-func (rawJSONCodec) Name() string {
-	return "json"
-}
-
-func init() {
-	encoding.RegisterCodec(rawJSONCodec{})
-}
 
 // PlanningClientInterface defines gRPC client methods for planning-service
 type PlanningClientInterface interface {
@@ -117,10 +91,7 @@ func (c *PlanningServiceClient) FetchTripDetails(ctx context.Context, tripID str
 			continue
 		}
 
-		// When planning-service gRPC is connected, invoke /waypoint.planning.v1.PlanningService/GetTrip
-		// Payload: {"trip_id": tripID}
-		var rawResp json.RawMessage
-		err = conn.Invoke(callCtx, "/waypoint.planning.v1.PlanningService/GetTrip", map[string]string{"trip_id": tripID}, &rawResp, grpc.CallContentSubtype("json"))
+		response, err := planningpb.NewPlanningServiceClient(conn).GetTrip(callCtx, &planningpb.GetTripRequest{TripId: tripID})
 		conn.Close()
 		cancel()
 
@@ -130,9 +101,14 @@ func (c *PlanningServiceClient) FetchTripDetails(ctx context.Context, tripID str
 			continue
 		}
 
-		// Successful invocation
+		trip := response.GetTrip()
+		if trip == nil || trip.GetTripId() != tripID {
+			return nil, fmt.Errorf("planning returned an empty or mismatched trip")
+		}
 		return &PlanningTripSnapshot{
-			TripID: tripID,
+			TripID: trip.GetTripId(), VehicleID: trip.GetVehicleId(), DriverID: trip.GetDriverId(),
+			TripNumber: int(trip.GetTripNumber()), DeliveryDate: trip.GetDeliveryDate(), Status: trip.GetStatus(),
+			StopSequence: trip.GetStopSequence(), TotalWeightKg: trip.GetTotalWeightKg(), TotalVolumeM3: trip.GetTotalVolumeM3(),
 		}, nil
 	}
 

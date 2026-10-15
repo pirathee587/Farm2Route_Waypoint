@@ -1,0 +1,6 @@
+---
+- name: Configure existing Waypoint cluster dependencies
+  hosts: runners
+  gather_facts: false
+  roles:
+    - cluster

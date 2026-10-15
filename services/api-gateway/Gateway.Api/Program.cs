@@ -1,4 +1,5 @@
 using System.Text;
+using Gateway.Api.Config;
 using Gateway.Api.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -16,24 +17,25 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // ── JWT Bearer ────────────────────────────────────────────────────────────
-var jwtSecret = builder.Configuration["Jwt:Secret"]
-    ?? throw new InvalidOperationException("Jwt:Secret is not configured");
+var jwtSecret = JwtSafety.RequireSecret(builder.Configuration["Jwt:Secret"]);
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = false;
+        options.RequireHttpsMetadata = true;
+        options.MapInboundClaims = false;
         options.SaveToken            = false;   // Gateway validates only, no identity
         options.TokenValidationParameters = new TokenValidationParameters
         {
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             ValidateIssuerSigningKey = true,
             IssuerSigningKey         = new SymmetricSecurityKey(
                                          Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer           = true,
             ValidIssuer              = builder.Configuration["Jwt:Issuer"],
             ValidateAudience         = true,
-            ValidAudience            = builder.Configuration["Jwt:Audience"],
+            ValidAudiences           = [builder.Configuration["Jwt:Audience"]!, WebSocketTickets.Audience],
             ValidateLifetime         = true,
             ClockSkew                = TimeSpan.FromSeconds(30),
             // Role claim mapping
@@ -93,6 +95,7 @@ builder.Services
 
 // ── Health checks ─────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
+builder.Services.AddSingleton(new WebSocketTicketReplayCache(TimeProvider.System));
 
 // ────────────────────────────────────────────────────────────────────────
 var app = builder.Build();
@@ -109,6 +112,7 @@ app.UseSerilogRequestLogging(opts =>
 });
 
 app.UseCors("GatewayCors");
+app.UseWebSockets();
 
 // ── JWT Validation Middleware ──────────────────────────────────────────────
 // Runs before YARP forwarding.
@@ -121,6 +125,14 @@ app.UseAuthorization();
 
 // ── Health endpoint (public — no JWT required) ─────────────────────────────
 app.MapHealthChecks("/health").AllowAnonymous();
+
+app.MapPost("/api/notify/ws-ticket", (HttpContext context, IConfiguration config) =>
+{
+    if (!WebSocketTickets.OriginAllowed(context.Request.Headers.Origin.ToString(), config))
+        return Results.StatusCode(403);
+    context.Response.Headers.CacheControl = "no-store";
+    return Results.Ok(new { ticket = WebSocketTickets.Issue(context.User, config), expiresIn = 30 });
+}).RequireAuthorization("Authenticated");
 
 // ── YARP reverse proxy ────────────────────────────────────────────────────
 app.MapReverseProxy();

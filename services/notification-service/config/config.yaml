@@ -9,7 +9,7 @@ database:
   name: ${SUPABASE_DB_NAME}
   user: ${SUPABASE_DB_USER}
   password: ${SUPABASE_DB_PASSWORD}
-  ssl_mode: require
+  ssl_mode: verify-full
   max_open_conns: 5
   max_idle_conns: 2
   conn_max_lifetime: 1200
@@ -23,6 +23,11 @@ rabbitmq:
     delivery_completed: delivery.completed
     flag_raised: flag.raised
     driver_notification: driver.notification
+  # Failed deliveries: bounded retries, then a confirmed publish to the DLQ.
+  max_attempts: 5
+  retry_initial_backoff_ms: 500
+  retry_max_backoff_ms: 8000
+  dead_letter_queue: notification.dead-letter
 
 jwt:
   secret: ${JWT_SECRET}

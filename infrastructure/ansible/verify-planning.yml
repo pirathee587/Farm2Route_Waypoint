@@ -1,0 +1,41 @@
+---
+- name: Gate planning-service releases on real tests and image scan
+  hosts: runners
+  gather_facts: false
+  tasks:
+    - name: Require an explicitly selected image
+      ansible.builtin.assert:
+        that: planning_image | default('') | length > 0
+        fail_msg: Supply -e planning_image=<image-tag-or-digest>; this playbook never pushes or deploys.
+
+    - name: Run planning-service verification
+      ansible.builtin.command:
+        argv: [mvn, -B, -ntp, -f, services/planning-service/pom.xml, verify]
+        chdir: "{{ waypoint_repo_root }}"
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Require PostgreSQL integration coverage rather than a skipped test
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import pathlib, xml.etree.ElementTree as ET
+            reports = list(pathlib.Path('services/planning-service/target/surefire-reports').glob('*PlanningPostgresIntegrationTest.xml'))
+            assert reports, 'Integration report missing'
+            for path in reports:
+                report = ET.parse(path).getroot()
+                assert int(report.get('tests', '0')) > 0, 'No integration tests ran'
+                assert all(int(report.get(key, '0')) == 0 for key in ('failures', 'errors', 'skipped')), 'Integration coverage failed or skipped'
+        chdir: "{{ waypoint_repo_root }}"
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Reject images containing critical vulnerabilities or secrets
+      ansible.builtin.command:
+        argv: [trivy, image, --scanners, 'vuln,secret', --exit-code, '1', --severity, CRITICAL, "{{ planning_image }}"]
+      environment:
+        TMPDIR: /var/tmp/trivy
+      changed_when: false
+      when: not ansible_check_mode
